@@ -1192,6 +1192,84 @@ static void swrap_bind_symbol_all(void)
  * SWRAP HELPER FUNCTIONS
  *********************************************************/
 
+/*
+ * For now we return 127.0.0.0
+ */
+static in_addr_t swrap_ipv4_net(void)
+{
+	static int initialized;
+	static in_addr_t hv;
+	const char *net_str = "127.0.0.0";
+	struct in_addr nv;
+	int ret;
+
+	if (initialized) {
+		return hv;
+	}
+	initialized = 1;
+
+	ret = inet_pton(AF_INET, net_str, &nv);
+	if (ret <= 0) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "INVALID IPv4 Network [%s]\n",
+			  net_str);
+		abort();
+	}
+
+	hv = ntohl(nv.s_addr);
+
+	switch (hv) {
+	case 0x7f000000:
+		/* 127.0.0.0 */
+		break;
+	case 0x0a353900:
+		/* 10.53.57.0 */
+		break;
+	default:
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "INVALID IPv4 Network [%s][0x%x] should be "
+			  "127.0.0.0 or 10.53.57.0\n",
+			  net_str, (unsigned)hv);
+		abort();
+	}
+
+	return hv;
+}
+
+/*
+ * This returns 127.255.255.255
+ */
+static in_addr_t swrap_ipv4_bcast(void)
+{
+	in_addr_t hv;
+
+	hv = swrap_ipv4_net();
+	hv |= IN_CLASSA_HOST;
+
+	return hv;
+}
+
+/*
+ * This returns 127.0.0.${iface}
+ */
+static in_addr_t swrap_ipv4_iface(unsigned int iface)
+{
+	in_addr_t hv;
+
+	if (iface == 0 || iface > MAX_WRAPPED_INTERFACES) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "swrap_ipv4_iface(%u) invalid!\n",
+			  iface);
+		abort();
+		return -1;
+	}
+
+	hv = swrap_ipv4_net();
+	hv |= iface;
+
+	return hv;
+}
+
 #ifdef HAVE_IPV6
 /*
  * FD00::5357:5FXX
@@ -1442,6 +1520,12 @@ static void socket_wrapper_init_sockets(void)
 		return;
 	}
 
+	/*
+	 * Intialize the static cache early before
+	 * any thread is able to start.
+	 */
+	(void)swrap_ipv4_net();
+
 	socket_wrapper_init_fds_idx();
 
 	/* Needs to be called inside the sockets_mutex lock here. */
@@ -1684,7 +1768,7 @@ static int convert_un_in(const struct sockaddr_un *un, struct sockaddr *in, sock
 
 		memset(in2, 0, sizeof(*in2));
 		in2->sin_family = AF_INET;
-		in2->sin_addr.s_addr = htonl((127<<24) | iface);
+		in2->sin_addr.s_addr = htonl(swrap_ipv4_iface(iface));
 		in2->sin_port = htons(prt);
 
 		*len = sizeof(*in2);
@@ -1737,6 +1821,8 @@ static int convert_in_un_remote(struct socket_info *si, const struct sockaddr *i
 		char u_type = '\0';
 		char b_type = '\0';
 		char a_type = '\0';
+		const unsigned int sw_net_addr = swrap_ipv4_net();
+		const unsigned int sw_bcast_addr = swrap_ipv4_bcast();
 
 		switch (si->type) {
 		case SOCK_STREAM:
@@ -1759,12 +1845,12 @@ static int convert_in_un_remote(struct socket_info *si, const struct sockaddr *i
 			is_bcast = 2;
 			type = a_type;
 			iface = socket_wrapper_default_iface();
-		} else if (b_type && addr == 0x7FFFFFFF) {
+		} else if (b_type && addr == sw_bcast_addr) {
 			/* 127.255.255.255 only udp */
 			is_bcast = 1;
 			type = b_type;
 			iface = socket_wrapper_default_iface();
-		} else if ((addr & 0xFFFFFF00) == 0x7F000000) {
+		} else if ((addr & 0xFFFFFF00) == sw_net_addr) {
 			/* 127.0.0.X */
 			is_bcast = 0;
 			type = u_type;
@@ -1869,6 +1955,8 @@ static int convert_in_un_alloc(struct socket_info *si, const struct sockaddr *in
 		char d_type = '\0';
 		char b_type = '\0';
 		char a_type = '\0';
+		const unsigned int sw_net_addr = swrap_ipv4_net();
+		const unsigned int sw_bcast_addr = swrap_ipv4_bcast();
 
 		prt = ntohs(in->sin_port);
 
@@ -1899,12 +1987,12 @@ static int convert_in_un_alloc(struct socket_info *si, const struct sockaddr *in
 			is_bcast = 2;
 			type = a_type;
 			iface = socket_wrapper_default_iface();
-		} else if (b_type && addr == 0x7FFFFFFF) {
+		} else if (b_type && addr == sw_bcast_addr) {
 			/* 127.255.255.255 only udp */
 			is_bcast = 1;
 			type = b_type;
 			iface = socket_wrapper_default_iface();
-		} else if ((addr & 0xFFFFFF00) == 0x7F000000) {
+		} else if ((addr & 0xFFFFFF00) == sw_net_addr) {
 			/* 127.0.0.X */
 			is_bcast = 0;
 			type = u_type;
@@ -1922,8 +2010,7 @@ static int convert_in_un_alloc(struct socket_info *si, const struct sockaddr *in
 			ZERO_STRUCT(bind_in);
 			bind_in.sin_family = in->sin_family;
 			bind_in.sin_port = in->sin_port;
-			bind_in.sin_addr.s_addr = htonl(0x7F000000 | iface);
-
+			bind_in.sin_addr.s_addr = htonl(swrap_ipv4_iface(iface));
 			si->bindname.sa_socklen = blen;
 			memcpy(&si->bindname.sa.in, &bind_in, blen);
 		}
@@ -3554,8 +3641,8 @@ static int swrap_auto_bind(int fd, struct socket_info *si, int family)
 
 		memset(&in, 0, sizeof(in));
 		in.sin_family = AF_INET;
-		in.sin_addr.s_addr = htonl(127<<24 |
-					   socket_wrapper_default_iface());
+		in.sin_addr.s_addr = htonl(swrap_ipv4_iface(
+					   socket_wrapper_default_iface()));
 
 		si->myname = (struct swrap_address) {
 			.sa_socklen = sizeof(in),
