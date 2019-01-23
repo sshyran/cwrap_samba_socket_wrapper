@@ -36,14 +36,26 @@ opens a port or a client wants to connect, socket_wrapper will translate IP
 addresses to a special socket_wrapper name and look for the relevant Unix
 socket in the SOCKET_WRAPPER_DIR.
 
+*SOCKET_WRAPPER_IPV4_NETWORK*::
+
+By default the loopback IPv4 network "127.0.0.0/8" and the
+"127.0.0.x" can be used. In order to make more realistic testing
+possible it is possible to use the "10.0.0.0/8" IPv4 network instead.
+But note within "10.0.0.0/8" only "10.53.57.<ID>" can be used,
+but the broadcast address is "10.255.255.255".
+The following two value are allowed:
+SOCKET_WRAPPER_IPV4_NETWORK="127.0.0.0" (the default) and
+SOCKET_WRAPPER_IPV4_NETWORK="10.53.57.0".
+
 *SOCKET_WRAPPER_DEFAULT_IFACE*::
 
 Additionally, the default interface to be used by an application is defined with
 "SOCKET_WRAPPER_DEFAULT_IFACE=<ID>" where the valid range for <ID> starts with 1
 (the default) and ends with 64. This is analogous to use the IPv4 addresses
-"127.0.0.<ID>" or IPv6 addresses "fd00::5357:5f<IDx>" (where <IDx> is a
-hexadecimal presentation of <ID>). You should always set the default interface.
-If you listen on INADDR_ANY then it will use the default interface to listen on.
+"127.0.0.<ID>"/"10.53.57.<ID>" or IPv6 addresses "fd00::5357:5f<IDx>" (where
+<IDx> is a hexadecimal presentation of <ID>). You should always set the default
+interface. If you listen on INADDR_ANY then it will use the default interface to
+listen on.
 
 *SOCKET_WRAPPER_PCAP_FILE*::
 

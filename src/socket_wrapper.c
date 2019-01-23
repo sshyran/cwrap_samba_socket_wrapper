@@ -1193,13 +1193,18 @@ static void swrap_bind_symbol_all(void)
  *********************************************************/
 
 /*
- * For now we return 127.0.0.0
+ * We return 127.0.0.0 (default) or 10.53.57.0.
+ *
+ * This can be controlled by:
+ * SOCKET_WRAPPER_IPV4_NETWORK=127.0.0.0 (default)
+ * or
+ * SOCKET_WRAPPER_IPV4_NETWORK=10.53.57.0
  */
 static in_addr_t swrap_ipv4_net(void)
 {
 	static int initialized;
 	static in_addr_t hv;
-	const char *net_str = "127.0.0.0";
+	const char *net_str = NULL;
 	struct in_addr nv;
 	int ret;
 
@@ -1207,6 +1212,11 @@ static in_addr_t swrap_ipv4_net(void)
 		return hv;
 	}
 	initialized = 1;
+
+	net_str = getenv("SOCKET_WRAPPER_IPV4_NETWORK");
+	if (net_str == NULL) {
+		net_str = "127.0.0.0";
+	}
 
 	ret = inet_pton(AF_INET, net_str, &nv);
 	if (ret <= 0) {
@@ -1237,7 +1247,7 @@ static in_addr_t swrap_ipv4_net(void)
 }
 
 /*
- * This returns 127.255.255.255
+ * This returns 127.255.255.255 or 10.255.255.255
  */
 static in_addr_t swrap_ipv4_bcast(void)
 {
@@ -1250,7 +1260,7 @@ static in_addr_t swrap_ipv4_bcast(void)
 }
 
 /*
- * This returns 127.0.0.${iface}
+ * This returns 127.0.0.${iface} or 10.53.57.${iface}
  */
 static in_addr_t swrap_ipv4_iface(unsigned int iface)
 {
@@ -1846,12 +1856,17 @@ static int convert_in_un_remote(struct socket_info *si, const struct sockaddr *i
 			type = a_type;
 			iface = socket_wrapper_default_iface();
 		} else if (b_type && addr == sw_bcast_addr) {
-			/* 127.255.255.255 only udp */
+			/*
+			 * 127.255.255.255
+			 * or
+			 * 10.255.255.255
+			 * only udp
+			 */
 			is_bcast = 1;
 			type = b_type;
 			iface = socket_wrapper_default_iface();
 		} else if ((addr & 0xFFFFFF00) == sw_net_addr) {
-			/* 127.0.0.X */
+			/* 127.0.0.X or 10.53.57.X */
 			is_bcast = 0;
 			type = u_type;
 			iface = (addr & 0x000000FF);
