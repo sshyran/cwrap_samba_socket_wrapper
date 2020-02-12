@@ -34,4 +34,16 @@ if (UNIX AND NOT WIN32)
         CACHE STRING "Flags used by the linker during the creation of shared libraries during UNDEFINEDSANITIZER builds.")
     set(CMAKE_EXEC_LINKER_FLAGS_UNDEFINEDSANITIZER "-fsanitize=undefined"
         CACHE STRING "Flags used by the linker during UNDEFINEDSANITIZER builds.")
+
+    # Activate with: -DCMAKE_BUILD_TYPE=ThreadSanitizer
+    set(CMAKE_C_FLAGS_THREADSANITIZER "-g -O1 -fsanitize=thread"
+        CACHE STRING "Flags used by the C compiler during THREADSANITIZER builds.")
+    set(CMAKE_CXX_FLAGS_THREADSANITIZER "-g -O1 -fsanitize=thread"
+        CACHE STRING "Flags used by the CXX compiler during THREADSANITIZER builds.")
+    set(CMAKE_SHARED_LINKER_FLAGS_THREADSANITIZER "-fsanitize=thread"
+        CACHE STRING "Flags used by the linker during the creation of shared libraries during THREADSANITIZER builds.")
+    set(CMAKE_MODULE_LINKER_FLAGS_THREADSANITIZER "-fsanitize=thread"
+        CACHE STRING "Flags used by the linker during the creation of shared libraries during THREADSANITIZER builds.")
+    set(CMAKE_EXEC_LINKER_FLAGS_THREADSANITIZER "-fsanitize=thread"
+        CACHE STRING "Flags used by the linker during THREADSANITIZER builds.")
 endif()
