@@ -77,6 +77,27 @@ fedora/undefined-sanitizer:
     paths:
       - obj/
 
+# realpath() doesn't work with libtsan and returns EINVAL
+#
+# fedora/thread-sanitizer:
+tumbleweed/thread-sanitizer:
+  image: $CI_REGISTRY/$BUILD_IMAGES_PROJECT:$TUMBLEWEED_BUILD
+  script:
+  - mkdir -p obj && cd obj && cmake
+    -DCMAKE_BUILD_TYPE=ThreadSanitizer
+    -DPICKY_DEVELOPER=ON
+    -DUNIT_TESTING=ON .. &&
+    make -j$(nproc) && ctest --output-on-failure
+  tags:
+  - shared
+  except:
+  - tags
+  artifacts:
+    expire_in: 1 week
+    when: on_failure
+    paths:
+      - obj/
+
 fedora/csbuild:
   image: $CI_REGISTRY/$BUILD_IMAGES_PROJECT:$FEDORA_BUILD
   script:

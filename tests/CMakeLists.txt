@@ -92,6 +92,15 @@ function(ADD_CMOCKA_TEST_ENVIRONMENT _TEST_NAME)
         set(TORTURE_ENVIRONMENT "LD_PRELOAD=${_TMP_ENV}")
     endif()
 
+    if (CMAKE_BUILD_TYPE)
+        string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LOWER)
+        if (CMAKE_BUILD_TYPE_LOWER STREQUAL "addresssanitizer" OR
+            CMAKE_BUILD_TYPE_LOWER STREQUAL "threadsanitizer" OR
+            CMAKE_BUILD_TYPE_LOWER STREQUAL "undefinedsanitizer")
+            list(APPEND TORTURE_ENVIRONMENT "SOCKET_WRAPPER_DISABLE_DEEPBIND=1")
+        endif()
+    endif()
+
     set_property(TEST
                     ${_TEST_NAME}
                 PROPERTY
