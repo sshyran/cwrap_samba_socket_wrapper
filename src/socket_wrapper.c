@@ -1536,6 +1536,9 @@ static unsigned int socket_wrapper_default_iface(void)
 
 static void set_socket_info_index(int fd, int idx)
 {
+	SWRAP_LOG(SWRAP_LOG_TRACE,
+		  "fd=%d idx=%d\n",
+		  fd, idx);
 	socket_fds_idx[fd] = idx;
 	/* This builtin issues a full memory barrier. */
 	__sync_synchronize();
@@ -1543,6 +1546,9 @@ static void set_socket_info_index(int fd, int idx)
 
 static void reset_socket_info_index(int fd)
 {
+	SWRAP_LOG(SWRAP_LOG_TRACE,
+		  "fd=%d idx=%d\n",
+		  fd, -1);
 	set_socket_info_index(fd, -1);
 }
 
@@ -3141,7 +3147,15 @@ static int swrap_socket(int family, int type, int protocol)
 	case AF_PACKET:
 #endif /* AF_PACKET */
 	case AF_UNIX:
-		return libc_socket(family, type, protocol);
+		fd = libc_socket(family, type, protocol);
+		if (fd != -1) {
+			/* Check if we have a stale fd and remove it */
+			swrap_remove_stale(fd);
+			SWRAP_LOG(SWRAP_LOG_TRACE,
+				  "Unix socket fd=%d",
+				  fd);
+		}
+		return fd;
 	default:
 		errno = EAFNOSUPPORT;
 		return -1;
@@ -3384,6 +3398,9 @@ static int swrap_accept(int s,
 	}
 
 	fd = ret;
+
+	/* Check if we have a stale fd and remove it */
+	swrap_remove_stale(fd);
 
 	SWRAP_LOCK_SI(parent_si);
 
@@ -3667,6 +3684,9 @@ static int swrap_connect(int s, const struct sockaddr *serv_addr,
 	}
 
 	if (si->family != serv_addr->sa_family) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "called for fd=%d (family=%d) called with invalid family=%d\n",
+			  s, si->family, serv_addr->sa_family);
 		errno = EINVAL;
 		ret = -1;
 		goto done;
@@ -6077,6 +6097,7 @@ static int swrap_close(int fd)
 		return libc_close(fd);
 	}
 
+	SWRAP_LOG(SWRAP_LOG_TRACE, "Close wrapper for fd=%d", fd);
 	reset_socket_info_index(fd);
 
 	si = swrap_get_socket_info(si_index);
