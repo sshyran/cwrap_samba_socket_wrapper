@@ -2455,6 +2455,7 @@ static const char *swrap_pcap_init_file(void)
 	if (strncmp(s, "./", 2) == 0) {
 		s += 2;
 	}
+	SWRAP_LOG(SWRAP_LOG_TRACE, "SOCKET_WRAPPER_PCAP_FILE: %s", s);
 	return s;
 }
 
