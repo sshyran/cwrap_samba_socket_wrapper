@@ -6432,3 +6432,54 @@ void swrap_destructor(void)
 		dlclose(swrap.libc.socket_handle);
 	}
 }
+
+#if defined(HAVE__SOCKET) && defined(HAVE__CLOSE)
+/*
+ * On FreeBSD 12 (and maybe other platforms)
+ * system libraries like libresolv prefix there
+ * syscalls with '_' in order to always use
+ * the symbols from libc.
+ *
+ * In the interaction with resolv_wrapper,
+ * we need to inject socket wrapper into libresolv,
+ * which means we need to private all socket
+ * related syscalls also with the '_' prefix.
+ *
+ * This is tested in Samba's 'make test',
+ * there we noticed that providing '_read'
+ * and '_open' would cause errors, which
+ * means we skip '_read', '_write' and
+ * all non socket related calls without
+ * further analyzing the problem.
+ */
+#define SWRAP_SYMBOL_ALIAS(__sym, __aliassym) \
+	extern typeof(__sym) __aliassym __attribute__ ((alias(#__sym)))
+
+#ifdef HAVE_ACCEPT4
+SWRAP_SYMBOL_ALIAS(accept4, _accept4);
+#endif
+SWRAP_SYMBOL_ALIAS(accept, _accept);
+SWRAP_SYMBOL_ALIAS(bind, _bind);
+SWRAP_SYMBOL_ALIAS(close, _close);
+SWRAP_SYMBOL_ALIAS(connect, _connect);
+SWRAP_SYMBOL_ALIAS(dup, _dup);
+SWRAP_SYMBOL_ALIAS(dup2, _dup2);
+SWRAP_SYMBOL_ALIAS(fcntl, _fcntl);
+SWRAP_SYMBOL_ALIAS(getpeername, _getpeername);
+SWRAP_SYMBOL_ALIAS(getsockname, _getsockname);
+SWRAP_SYMBOL_ALIAS(getsockopt, _getsockopt);
+SWRAP_SYMBOL_ALIAS(ioctl, _ioctl);
+SWRAP_SYMBOL_ALIAS(listen, _listen);
+SWRAP_SYMBOL_ALIAS(readv, _readv);
+SWRAP_SYMBOL_ALIAS(recv, _recv);
+SWRAP_SYMBOL_ALIAS(recvfrom, _recvfrom);
+SWRAP_SYMBOL_ALIAS(recvmsg, _recvmsg);
+SWRAP_SYMBOL_ALIAS(send, _send);
+SWRAP_SYMBOL_ALIAS(sendmsg, _sendmsg);
+SWRAP_SYMBOL_ALIAS(sendto, _sendto);
+SWRAP_SYMBOL_ALIAS(setsockopt, _setsockopt);
+SWRAP_SYMBOL_ALIAS(socket, _socket);
+SWRAP_SYMBOL_ALIAS(socketpair, _socketpair);
+SWRAP_SYMBOL_ALIAS(writev, _writev);
+
+#endif /* SOCKET_WRAPPER_EXPORT_UNDERSCORE_SYMBOLS */

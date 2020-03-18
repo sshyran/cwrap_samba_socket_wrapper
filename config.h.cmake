@@ -44,6 +44,8 @@
 #cmakedefine HAVE_GETPROGNAME 1
 #cmakedefine HAVE_GETEXECNAME 1
 #cmakedefine HAVE_PLEDGE 1
+#cmakedefine HAVE__SOCKET 1
+#cmakedefine HAVE__CLOSE 1
 
 #cmakedefine HAVE_ACCEPT_PSOCKLEN_T 1
 #cmakedefine HAVE_IOCTL_INT 1

@@ -70,9 +70,9 @@ check_function_exists(open64 HAVE_OPEN64)
 check_function_exists(fopen64 HAVE_FOPEN64)
 check_function_exists(getprogname HAVE_GETPROGNAME)
 check_function_exists(getexecname HAVE_GETEXECNAME)
-
 check_function_exists(pledge HAVE_PLEDGE)
-
+check_function_exists(_socket HAVE__SOCKET)
+check_function_exists(_close HAVE__CLOSE)
 
 if (UNIX)
     find_library(DLFCN_LIBRARY dl)
