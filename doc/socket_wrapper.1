@@ -77,7 +77,7 @@ The user defines a directory where to put all the unix sockets using the environ
 .PP
 \fBSOCKET_WRAPPER_DEFAULT_IFACE\fR
 .RS 4
-Additionally, the default interface to be used by an application is defined with "SOCKET_WRAPPER_DEFAULT_IFACE=<ID>" where <ID> is between 2 and 254\&. This is analogous to use the IPv4 addresses "127\&.0\&.0\&.<ID>" or IPv6 addresses "fd00::5357:5f<IDx>" (where <IDx> is a hexadecimal presentation of <ID>)\&. You should always set the default interface\&. If you listen on INADDR_ANY then it will use the default interface to listen on\&.
+Additionally, the default interface to be used by an application is defined with "SOCKET_WRAPPER_DEFAULT_IFACE=<ID>" where the valid range for <ID> starts with 1 (the default) and ends with 64\&. This is analogous to use the IPv4 addresses "127\&.0\&.0\&.<ID>" or IPv6 addresses "fd00::5357:5f<IDx>" (where <IDx> is a hexadecimal presentation of <ID>)\&. You should always set the default interface\&. If you listen on INADDR_ANY then it will use the default interface to listen on\&.
 .RE
 .PP
 \fBSOCKET_WRAPPER_PCAP_FILE\fR
