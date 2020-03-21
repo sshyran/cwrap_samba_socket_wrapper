@@ -123,6 +123,7 @@ freebsd/x86_64:
   only:
   - branches@cwrap/socket_wrapper
   - branches@cryptomilk/socket_wrapper
+  - branches@metze/socket_wrapper
   artifacts:
     expire_in: 1 week
     when: on_failure
