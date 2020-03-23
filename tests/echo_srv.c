@@ -920,7 +920,9 @@ int main(int argc, char **argv)
     }
 
     echo(sock, &opts);
-    close(sock);
+    if (sock >= 0) {
+        close(sock);
+    }
 
     if (opts.daemon && opts.pidfile != NULL) {
         unlink(opts.pidfile);
