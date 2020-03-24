@@ -45,8 +45,10 @@
 
 static void test_swrap_signal_handler(int signum)
 {
+	ssize_t w;
 	fprintf(stderr, "PID: %u, SIGNUM: %d\n", (unsigned int)getpid(), signum);
-	write(1, "DEADLOCK?\n", 10);
+	w = write(1, "DEADLOCK?\n", 10);
+	fprintf(stderr, "WRITE: %zu\n", w);
 }
 
 static void test_swrap_fork_pthread(void **state)
