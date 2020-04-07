@@ -658,7 +658,7 @@ static void *swrap_load_lib_handle(enum swrap_lib lib)
 		handle = swrap.libc.handle = swrap.libc.socket_handle = RTLD_NEXT;
 #else
 		SWRAP_LOG(SWRAP_LOG_ERROR,
-			  "Failed to dlopen library: %s\n",
+			  "Failed to dlopen library: %s",
 			  dlerror());
 		exit(-1);
 #endif
@@ -677,7 +677,7 @@ static void *_swrap_bind_symbol(enum swrap_lib lib, const char *fn_name)
 	func = dlsym(handle, fn_name);
 	if (func == NULL) {
 		SWRAP_LOG(SWRAP_LOG_ERROR,
-			  "Failed to find %s: %s\n",
+			  "Failed to find %s: %s",
 			  fn_name,
 			  dlerror());
 		exit(-1);
@@ -1221,7 +1221,7 @@ static in_addr_t swrap_ipv4_net(void)
 	ret = inet_pton(AF_INET, net_str, &nv);
 	if (ret <= 0) {
 		SWRAP_LOG(SWRAP_LOG_ERROR,
-			  "INVALID IPv4 Network [%s]\n",
+			  "INVALID IPv4 Network [%s]",
 			  net_str);
 		abort();
 	}
@@ -1238,7 +1238,7 @@ static in_addr_t swrap_ipv4_net(void)
 	default:
 		SWRAP_LOG(SWRAP_LOG_ERROR,
 			  "INVALID IPv4 Network [%s][0x%x] should be "
-			  "127.0.0.0 or 10.53.57.0\n",
+			  "127.0.0.0 or 10.53.57.0",
 			  net_str, (unsigned)hv);
 		abort();
 	}
@@ -1268,7 +1268,7 @@ static in_addr_t swrap_ipv4_iface(unsigned int iface)
 
 	if (iface == 0 || iface > MAX_WRAPPED_INTERFACES) {
 		SWRAP_LOG(SWRAP_LOG_ERROR,
-			  "swrap_ipv4_iface(%u) invalid!\n",
+			  "swrap_ipv4_iface(%u) invalid!",
 			  iface);
 		abort();
 		return -1;
@@ -1376,7 +1376,7 @@ static char *socket_wrapper_dir(void)
 	char *s = getenv("SOCKET_WRAPPER_DIR");
 
 	if (s == NULL) {
-		SWRAP_LOG(SWRAP_LOG_WARN, "SOCKET_WRAPPER_DIR not set\n");
+		SWRAP_LOG(SWRAP_LOG_WARN, "SOCKET_WRAPPER_DIR not set");
 		return NULL;
 	}
 
@@ -1631,7 +1631,7 @@ static unsigned int socket_wrapper_default_iface(void)
 static void set_socket_info_index(int fd, int idx)
 {
 	SWRAP_LOG(SWRAP_LOG_TRACE,
-		  "fd=%d idx=%d\n",
+		  "fd=%d idx=%d",
 		  fd, idx);
 	socket_fds_idx[fd] = idx;
 	/* This builtin issues a full memory barrier. */
@@ -1641,7 +1641,7 @@ static void set_socket_info_index(int fd, int idx)
 static void reset_socket_info_index(int fd)
 {
 	SWRAP_LOG(SWRAP_LOG_TRACE,
-		  "fd=%d idx=%d\n",
+		  "fd=%d idx=%d",
 		  fd, -1);
 	set_socket_info_index(fd, -1);
 }
@@ -1844,7 +1844,7 @@ static int convert_in_un_remote(struct socket_info *si, const struct sockaddr *i
 			b_type = SOCKET_TYPE_CHAR_UDP;
 			break;
 		default:
-			SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown socket type!\n");
+			SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown socket type!");
 			errno = ESOCKTNOSUPPORT;
 			return -1;
 		}
@@ -1891,7 +1891,7 @@ static int convert_in_un_remote(struct socket_info *si, const struct sockaddr *i
 			type = SOCKET_TYPE_CHAR_UDP_V6;
 			break;
 		default:
-			SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown socket type!\n");
+			SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown socket type!");
 			errno = ESOCKTNOSUPPORT;
 			return -1;
 		}
@@ -1914,13 +1914,13 @@ static int convert_in_un_remote(struct socket_info *si, const struct sockaddr *i
 	}
 #endif
 	default:
-		SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown address family!\n");
+		SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown address family!");
 		errno = ENETUNREACH;
 		return -1;
 	}
 
 	if (prt == 0) {
-		SWRAP_LOG(SWRAP_LOG_WARN, "Port not set\n");
+		SWRAP_LOG(SWRAP_LOG_WARN, "Port not set");
 		errno = EINVAL;
 		return -1;
 	}
@@ -1987,7 +1987,7 @@ static int convert_in_un_alloc(struct socket_info *si, const struct sockaddr *in
 			b_type = SOCKET_TYPE_CHAR_UDP;
 			break;
 		default:
-			SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown socket type!\n");
+			SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown socket type!");
 			errno = ESOCKTNOSUPPORT;
 			return -1;
 		}
@@ -2046,7 +2046,7 @@ static int convert_in_un_alloc(struct socket_info *si, const struct sockaddr *in
 			type = SOCKET_TYPE_CHAR_UDP_V6;
 			break;
 		default:
-			SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown socket type!\n");
+			SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown socket type!");
 			errno = ESOCKTNOSUPPORT;
 			return -1;
 		}
@@ -2087,7 +2087,7 @@ static int convert_in_un_alloc(struct socket_info *si, const struct sockaddr *in
 	}
 #endif
 	default:
-		SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown address family\n");
+		SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown address family");
 		errno = EADDRNOTAVAIL;
 		return -1;
 	}
@@ -2329,7 +2329,7 @@ static int sockaddr_convert_to_un(struct socket_info *si,
 		case SOCK_DGRAM:
 			break;
 		default:
-			SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown socket type!\n");
+			SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown socket type!");
 			errno = ESOCKTNOSUPPORT;
 			return -1;
 		}
@@ -2343,7 +2343,7 @@ static int sockaddr_convert_to_un(struct socket_info *si,
 	}
 
 	errno = EAFNOSUPPORT;
-	SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown address family\n");
+	SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown address family");
 	return -1;
 }
 
@@ -2374,7 +2374,7 @@ static int sockaddr_convert_from_un(const struct socket_info *si,
 		case SOCK_DGRAM:
 			break;
 		default:
-			SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown socket type!\n");
+			SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown socket type!");
 			errno = ESOCKTNOSUPPORT;
 			return -1;
 		}
@@ -2387,7 +2387,7 @@ static int sockaddr_convert_from_un(const struct socket_info *si,
 		break;
 	}
 
-	SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown address family\n");
+	SWRAP_LOG(SWRAP_LOG_ERROR, "Unknown address family");
 	errno = EAFNOSUPPORT;
 	return -1;
 }
@@ -3787,7 +3787,7 @@ static int swrap_connect(int s, const struct sockaddr *serv_addr,
 
 	if (si->family != serv_addr->sa_family) {
 		SWRAP_LOG(SWRAP_LOG_ERROR,
-			  "called for fd=%d (family=%d) called with invalid family=%d\n",
+			  "called for fd=%d (family=%d) called with invalid family=%d",
 			  s, si->family, serv_addr->sa_family);
 		errno = EINVAL;
 		ret = -1;
