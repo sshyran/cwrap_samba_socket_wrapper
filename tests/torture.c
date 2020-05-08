@@ -255,8 +255,7 @@ void torture_teardown_socket_dir(void **state)
 void torture_teardown_echo_srv(void **state)
 {
 	struct torture_state *s = *state;
-	char buf[8] = {0};
-	long int tmp;
+	char buf[12] = {0}; /* -2147483648 + null byte */
 	ssize_t rc;
 	pid_t pid;
 	int fd;
@@ -277,12 +276,11 @@ void torture_teardown_echo_srv(void **state)
 
 	buf[sizeof(buf) - 1] = '\0';
 
-	tmp = strtol(buf, NULL, 10);
-	if (tmp == 0 || tmp > 0xFFFF || errno == ERANGE) {
+	errno = 0;
+	pid = strtol(buf, NULL, 10);
+	if (pid == 0 || errno != 0) {
 		goto done;
 	}
-
-	pid = (pid_t)(tmp & 0xFFFF);
 
 	for (count = 0; count < 10; count++) {
 		/* Make sure the daemon goes away! */
