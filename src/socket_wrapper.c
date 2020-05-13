@@ -1409,10 +1409,30 @@ static int swrap_un_path_EINVAL(struct sockaddr_un *un,
 	return 0;
 }
 
+static bool swrap_dir_usable(const char *swrap_dir)
+{
+	struct sockaddr_un un;
+	int ret;
+
+	ret = swrap_un_path(&un, swrap_dir, SOCKET_TYPE_CHAR_TCP, 0, 0);
+	if (ret == 0) {
+		return true;
+	}
+
+	ret = swrap_un_path_EINVAL(&un, swrap_dir);
+	if (ret == 0) {
+		return true;
+	}
+
+	return false;
+}
+
 static char *socket_wrapper_dir(void)
 {
 	char *swrap_dir = NULL;
 	char *s = getenv("SOCKET_WRAPPER_DIR");
+	char *t;
+	bool ok;
 
 	if (s == NULL) {
 		SWRAP_LOG(SWRAP_LOG_WARN, "SOCKET_WRAPPER_DIR not set");
@@ -1427,6 +1447,17 @@ static char *socket_wrapper_dir(void)
 		abort();
 	}
 
+	ok = swrap_dir_usable(swrap_dir);
+	if (ok) {
+		goto done;
+	}
+
+	free(swrap_dir);
+
+	SWRAP_LOG(SWRAP_LOG_ERROR, "SOCKET_WRAPPER_DIR is too long");
+	abort();
+
+done:
 	SWRAP_LOG(SWRAP_LOG_TRACE, "socket_wrapper_dir: %s", swrap_dir);
 	return swrap_dir;
 }
