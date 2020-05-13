@@ -95,6 +95,16 @@ debug symbols.
 This allows you to disable deep binding in socket_wrapper. This is useful for
 running valgrind tools or sanitizers like (address, undefined, thread).
 
+*SOCKET_WRAPPER_DIR_ALLOW_ORIG*::
+
+SOCKET_WRAPPER_DIR is resolved by socket_wrapper using realpath(3).
+Given that Unix sockets are constructed relative to this directory,
+the resulting path can sometimes be too long to allow valid socket
+paths to be constructed due to length restrictions.  Setting this
+variable (to any value) allows socket_wrapper to fall back to the
+original value of SOCKET_WRAPPER_DIR if realpath(3) makes it too long
+to be usable.
+
 EXAMPLE
 -------
 

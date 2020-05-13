@@ -1,7 +1,7 @@
 '\" t
 .\"     Title: socket_wrapper
 .\"    Author: Samba Team
-.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
+.\" Generator: DocBook XSL Stylesheets v1.79.1 <http://docbook.sf.net/>
 .\"      Date: 2018-11-28
 .\"    Manual: \ \&
 .\"    Source: \ \&
@@ -156,6 +156,11 @@ If you need to see what is going on in socket_wrapper itself or try to find a bu
 \fBSOCKET_WRAPPER_DISABLE_DEEPBIND\fR
 .RS 4
 This allows you to disable deep binding in socket_wrapper\&. This is useful for running valgrind tools or sanitizers like (address, undefined, thread)\&.
+.RE
+.PP
+\fBSOCKET_WRAPPER_DIR_ALLOW_ORIG\fR
+.RS 4
+SOCKET_WRAPPER_DIR is resolved by socket_wrapper using realpath(3)\&. Given that Unix sockets are constructed relative to this directory, the resulting path can sometimes be too long to allow valid socket paths to be constructed due to length restrictions\&. Setting this variable (to any value) allows socket_wrapper to fall back to the original value of SOCKET_WRAPPER_DIR if realpath(3) makes it too long to be usable\&.
 .RE
 .SH "EXAMPLE"
 .sp
