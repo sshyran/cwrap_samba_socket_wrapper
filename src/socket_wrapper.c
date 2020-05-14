@@ -1454,8 +1454,31 @@ static char *socket_wrapper_dir(void)
 
 	free(swrap_dir);
 
-	SWRAP_LOG(SWRAP_LOG_ERROR, "SOCKET_WRAPPER_DIR is too long");
-	abort();
+	ok = swrap_dir_usable(s);
+	if (!ok) {
+		SWRAP_LOG(SWRAP_LOG_ERROR, "SOCKET_WRAPPER_DIR is too long");
+		abort();
+	}
+
+	t = getenv("SOCKET_WRAPPER_DIR_ALLOW_ORIG");
+	if (t == NULL) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "realpath(SOCKET_WRAPPER_DIR) too long and "
+			  "SOCKET_WRAPPER_DIR_ALLOW_ORIG not set");
+		abort();
+
+	}
+
+	swrap_dir = strdup(s);
+	if (swrap_dir == NULL) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "Unable to duplicate socket_wrapper dir path");
+		abort();
+	}
+
+	SWRAP_LOG(SWRAP_LOG_WARN,
+		  "realpath(SOCKET_WRAPPER_DIR) too long, "
+		  "using original SOCKET_WRAPPER_DIR\n");
 
 done:
 	SWRAP_LOG(SWRAP_LOG_TRACE, "socket_wrapper_dir: %s", swrap_dir);
