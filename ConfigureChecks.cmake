@@ -43,6 +43,7 @@ int main(void){ return 0; }
 endif(CMAKE_COMPILER_IS_GNUCC AND NOT MINGW AND NOT OS2)
 
 # HEADERS
+check_include_file(netinet/tcp_fsm.h HAVE_NETINET_TCP_FSM_H)
 check_include_file(sys/filio.h HAVE_SYS_FILIO_H)
 check_include_file(sys/signalfd.h HAVE_SYS_SIGNALFD_H)
 check_include_file(sys/eventfd.h HAVE_SYS_EVENTFD_H)

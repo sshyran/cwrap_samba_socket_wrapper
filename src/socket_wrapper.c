@@ -66,6 +66,9 @@
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#ifdef HAVE_NETINET_TCP_FSM_H
+#include <netinet/tcp_fsm.h>
+#endif
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -264,6 +267,7 @@ struct socket_info
 	int defer_connect;
 	int pktinfo;
 	int tcp_nodelay;
+	int listening;
 
 	/* The unix path so we can unlink it on close() */
 	struct sockaddr_un un_addr;
@@ -4188,6 +4192,9 @@ static int swrap_listen(int s, int backlog)
 	}
 
 	ret = libc_listen(s, backlog);
+	if (ret == 0) {
+		si->listening = 1;
+	}
 
 out:
 	SWRAP_UNLOCK_SI(si);
@@ -4537,6 +4544,56 @@ static int swrap_getsockopt(int s, int level, int optname,
 			ret = 0;
 			goto done;
 #endif /* TCP_NODELAY */
+#ifdef TCP_INFO
+		case TCP_INFO: {
+			struct tcp_info info;
+			socklen_t ilen = sizeof(info);
+
+#ifdef HAVE_NETINET_TCP_FSM_H
+/* This is FreeBSD */
+# define __TCP_LISTEN TCPS_LISTEN
+# define __TCP_ESTABLISHED TCPS_ESTABLISHED
+# define __TCP_CLOSE TCPS_CLOSED
+#else
+/* This is Linux */
+# define __TCP_LISTEN TCP_LISTEN
+# define __TCP_ESTABLISHED TCP_ESTABLISHED
+# define __TCP_CLOSE TCP_CLOSE
+#endif
+
+			ZERO_STRUCT(info);
+			if (si->listening) {
+				info.tcpi_state = __TCP_LISTEN;
+			} else if (si->connected) {
+				/*
+				 * For now we just fake a few values
+				 * supported both by FreeBSD and Linux
+				 */
+				info.tcpi_state = __TCP_ESTABLISHED;
+				info.tcpi_rto = 200000;  /* 200 msec */
+				info.tcpi_rtt = 5000;    /* 5 msec */
+				info.tcpi_rttvar = 5000; /* 5 msec */
+			} else {
+				info.tcpi_state = __TCP_CLOSE;
+				info.tcpi_rto = 1000000;  /* 1 sec */
+				info.tcpi_rtt = 0;
+				info.tcpi_rttvar = 250000; /* 250 msec */
+			}
+
+			if (optval == NULL || optlen == NULL ||
+			    *optlen < (socklen_t)ilen) {
+				errno = EINVAL;
+				ret = -1;
+				goto done;
+			}
+
+			*optlen = ilen;
+			memcpy(optval, &info, ilen);
+
+			ret = 0;
+			goto done;
+		}
+#endif /* TCP_INFO */
 		default:
 			break;
 		}
