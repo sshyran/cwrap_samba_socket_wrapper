@@ -1385,7 +1385,7 @@ static char *socket_wrapper_dir(void)
 		SWRAP_LOG(SWRAP_LOG_ERROR,
 			  "Unable to resolve socket_wrapper dir path: %s",
 			  strerror(errno));
-		return NULL;
+		abort();
 	}
 
 	SWRAP_LOG(SWRAP_LOG_TRACE, "socket_wrapper_dir: %s", swrap_dir);
