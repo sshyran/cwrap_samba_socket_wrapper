@@ -9,7 +9,6 @@
 
 /************************** HEADER FILES *************************/
 
-#cmakedefine HAVE_NETINET_TCP_FSM_H 1
 #cmakedefine HAVE_SYS_FILIO_H 1
 #cmakedefine HAVE_SYS_SIGNALFD_H 1
 #cmakedefine HAVE_SYS_EVENTFD_H 1
