@@ -11,11 +11,24 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#ifdef HAVE_NETINET_TCP_FSM_H
+#include <netinet/tcp_fsm.h>
+#endif
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+
+#ifdef HAVE_NETINET_TCP_FSM_H
+/* This is FreeBSD */
+# define __TCP_ESTABLISHED TCPS_ESTABLISHED
+# define __TCP_CLOSE TCPS_CLOSED
+#else
+/* This is Linux */
+# define __TCP_ESTABLISHED TCP_ESTABLISHED
+# define __TCP_CLOSE TCP_CLOSE
+#endif
 
 #ifndef ZERO_STRUCT
 #define ZERO_STRUCT(x) memset((char *)&(x), 0, sizeof(x))
@@ -300,6 +313,9 @@ static void test_sockopt_tcp(void **state)
 		.sa_socklen = sizeof(struct sockaddr_in),
 	};
 	int opt = -1;
+#ifdef TCP_INFO
+	struct tcp_info info;
+#endif
 	socklen_t optlen = sizeof(int);
 	int rc;
 
@@ -318,9 +334,27 @@ static void test_sockopt_tcp(void **state)
 		       &addr.sa.in.sin_addr);
 	assert_int_equal(rc, 1);
 
+#ifdef TCP_INFO
+	ZERO_STRUCT(info);
+	optlen = sizeof(info);
+	rc = getsockopt(s, IPPROTO_TCP, TCP_INFO, &info, &optlen);
+	assert_return_code(rc, errno);
+	assert_int_equal(optlen, sizeof(info));
+	printf("info.tcpi_state=0x%x\n", info.tcpi_state);
+	printf("info.tcpi_rto=%u\n", info.tcpi_rto);
+	printf("info.tcpi_rtt=%u\n", info.tcpi_rtt);
+	printf("info.tcpi_rttvar=%u\n", info.tcpi_rttvar);
+	assert_int_equal(info.tcpi_state, __TCP_CLOSE);
+	assert_int_not_equal(info.tcpi_rto, 0);
+	assert_int_equal(info.tcpi_rtt, 0);
+	assert_int_not_equal(info.tcpi_rttvar, 0);
+#endif /* TCP_INFO */
+
 	rc = connect(s, &addr.sa.s, addr.sa_socklen);
 	assert_int_equal(rc, 0);
 
+	opt = -1;
+	optlen = sizeof(int);
 	rc = getsockopt(s, IPPROTO_TCP, TCP_NODELAY, &opt, &optlen);
 	assert_return_code(rc, errno);
 	assert_int_equal(opt, 0);
@@ -335,6 +369,22 @@ static void test_sockopt_tcp(void **state)
 	rc = getsockopt(s, IPPROTO_TCP, TCP_NODELAY, &opt, &optlen);
 	assert_return_code(rc, errno);
 	assert_int_equal(opt, 1);
+
+#ifdef TCP_INFO
+	ZERO_STRUCT(info);
+	optlen = sizeof(info);
+	rc = getsockopt(s, IPPROTO_TCP, TCP_INFO, &info, &optlen);
+	assert_return_code(rc, errno);
+	assert_int_equal(optlen, sizeof(info));
+	printf("info.tcpi_state=0x%x\n", info.tcpi_state);
+	printf("info.tcpi_rto=%u\n", info.tcpi_rto);
+	printf("info.tcpi_rtt=%u\n", info.tcpi_rtt);
+	printf("info.tcpi_rttvar=%u\n", info.tcpi_rttvar);
+	assert_int_equal(info.tcpi_state, __TCP_ESTABLISHED);
+	assert_int_not_equal(info.tcpi_rto, 0);
+	assert_int_not_equal(info.tcpi_rtt, 0);
+	assert_int_not_equal(info.tcpi_rttvar, 0);
+#endif /* TCP_INFO */
 
 	close(s);
 }

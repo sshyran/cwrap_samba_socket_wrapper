@@ -9,6 +9,10 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
+#ifdef HAVE_NETINET_TCP_FSM_H
+#include <netinet/tcp_fsm.h>
+#endif
 #include <netdb.h>
 #include <resolv.h>
 
@@ -315,6 +319,34 @@ static int setup_srv(struct echo_srv_opts *opts, int *_sock)
             perror("listen");
             return ret;
         }
+#ifdef TCP_INFO
+        {
+            struct tcp_info info;
+            socklen_t optlen = sizeof(info);
+
+            ZERO_STRUCT(info);
+            ret = getsockopt(sock, IPPROTO_TCP, TCP_INFO, &info, &optlen);
+            if (ret == -1) {
+                ret = errno;
+                perror("TCP_INFO failed");
+                close(sock);
+                return ret;
+            }
+#ifdef HAVE_NETINET_TCP_FSM_H
+/* This is FreeBSD */
+# define __TCP_LISTEN TCPS_LISTEN
+#else
+/* This is Linux */
+# define __TCP_LISTEN TCP_LISTEN
+#endif
+            if (info.tcpi_state != __TCP_LISTEN) {
+                errno = ret = ERANGE;
+                perror("not __TCP_LISTEN => ERANGE...");
+                close(sock);
+                return ret;
+            }
+        }
+#endif /* TCP_INFO */
     }
 
     *_sock = sock;
