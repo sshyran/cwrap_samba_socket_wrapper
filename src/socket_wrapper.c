@@ -4635,7 +4635,7 @@ static int swrap_vioctl(int s, unsigned long int r, va_list va)
 {
 	struct socket_info *si = find_socket_info(s);
 	va_list ap;
-	int *value_ptr = NULL;
+	int value;
 	int rc;
 
 	if (!si) {
@@ -4650,13 +4650,11 @@ static int swrap_vioctl(int s, unsigned long int r, va_list va)
 
 	switch (r) {
 	case FIONREAD:
-		if (rc == 0) {
-			value_ptr = ((int *)va_arg(ap, int *));
-		}
+		value = *((int *)va_arg(ap, int *));
 
 		if (rc == -1 && errno != EAGAIN && errno != ENOBUFS) {
 			swrap_pcap_dump_packet(si, NULL, SWRAP_PENDING_RST, NULL, 0);
-		} else if (value_ptr != NULL && *value_ptr == 0) { /* END OF FILE */
+		} else if (value == 0) { /* END OF FILE */
 			swrap_pcap_dump_packet(si, NULL, SWRAP_PENDING_RST, NULL, 0);
 		}
 		break;
