@@ -4660,24 +4660,6 @@ static int swrap_vioctl(int s, unsigned long int r, va_list va)
 			swrap_pcap_dump_packet(si, NULL, SWRAP_PENDING_RST, NULL, 0);
 		}
 		break;
-#ifdef FIONWRITE
-	case FIONWRITE:
-		/* this is FreeBSD */
-		FALL_THROUGH; /* to TIOCOUTQ */
-#endif /* FIONWRITE */
-	case TIOCOUTQ: /* same as SIOCOUTQ on Linux */
-		/*
-		 * This may return more bytes then the application
-		 * sent into the socket, for tcp it should
-		 * return the number of unacked bytes.
-		 *
-		 * On AF_UNIX, all bytes are immediately acked!
-		 */
-		if (rc == 0) {
-			value_ptr = ((int *)va_arg(ap, int *));
-			*value_ptr = 0;
-		}
-		break;
 	}
 
 	va_end(ap);
