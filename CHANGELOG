@@ -1,6 +1,11 @@
 ChangeLog
 ==========
 
+version 1.2.5 (released 2020-06-22)
+  * Added basic support for TCP_INFO and SIOCOUTQ/TIOCOUTQ/FIONWRITE
+  * Add SOCKET_WRAPPER_DIR_ALLOW_ORIG and abort() early if
+    SOCKET_WRAPPER_DIR is unusable
+
 version 1.2.4 (released 2020-03-24)
   * Added support for 10.53.57.0 network
   * Added _{socket,close,connect,...} symbols on FreeBSD
