@@ -2,12 +2,12 @@
 .\"     Title: socket_wrapper
 .\"    Author: Samba Team
 .\" Generator: DocBook XSL Stylesheets v1.79.1 <http://docbook.sf.net/>
-.\"      Date: 2018-11-28
+.\"      Date: 2021-02-01
 .\"    Manual: \ \&
 .\"    Source: \ \&
 .\"  Language: English
 .\"
-.TH "SOCKET_WRAPPER" "1" "2018\-11\-28" "\ \&" "\ \&"
+.TH "SOCKET_WRAPPER" "1" "2021\-02\-01" "\ \&" "\ \&"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -67,6 +67,17 @@ Support for IPv4 and IPv6 socket and addressing emulation\&.
 .IP \(bu 2.3
 .\}
 Ability to capture network traffic in pcap format\&.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+Passing IP sockets (up to 6) via SCM_RIGHTS is supported, but pcap support only works reliable if the socket is used by a single process at a time\&.
 .RE
 .SH "ENVIRONMENT VARIABLES"
 .PP

@@ -116,10 +116,6 @@ foreach(_SWRAP_TEST ${SWRAP_TESTS})
     add_cmocka_test_environment(${_SWRAP_TEST})
 endforeach()
 
-if (HAVE_STRUCT_MSGHDR_MSG_CONTROL)
-    set_tests_properties(test_echo_tcp_sendmsg_recvmsg_fd PROPERTIES WILL_FAIL TRUE)
-endif (HAVE_STRUCT_MSGHDR_MSG_CONTROL)
-
 if (HELGRIND_TESTING)
     find_program(VALGRIND_EXECUTABLE valgrind)
     if (VALGRIND_EXECUTABLE)

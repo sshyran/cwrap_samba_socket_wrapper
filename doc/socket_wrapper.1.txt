@@ -1,6 +1,6 @@
 socket_wrapper(1)
 =================
-:revdate: 2018-11-28
+:revdate: 2021-02-01
 :author: Samba Team
 
 NAME
@@ -24,6 +24,9 @@ testing of complex network configurations.
 - Redirects all network communication to happen over Unix sockets.
 - Support for IPv4 and IPv6 socket and addressing emulation.
 - Ability to capture network traffic in pcap format.
+- Passing IP sockets (up to 6) via SCM_RIGHTS is supported,
+  but pcap support only works reliable if the socket is used
+  by a single process at a time.
 
 ENVIRONMENT VARIABLES
 ---------------------

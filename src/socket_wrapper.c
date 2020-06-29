@@ -302,6 +302,11 @@ static int first_free;
 
 struct socket_info
 {
+	/*
+	 * Remember to update swrap_unix_scm_right_magic
+	 * on any change.
+	 */
+
 	int family;
 	int type;
 	int protocol;
@@ -313,6 +318,7 @@ struct socket_info
 	int pktinfo;
 	int tcp_nodelay;
 	int listening;
+	int fd_passed;
 
 	/* The unix path so we can unlink it on close() */
 	struct sockaddr_un un_addr;
@@ -5152,10 +5158,679 @@ static int swrap_sendmsg_filter_cmsg_sol_socket(const struct cmsghdr *cmsg,
 	return rc;
 }
 
+static const uint64_t swrap_unix_scm_right_magic = 0x8e0e13f27c42fc36;
+
+/*
+ * We only allow up to 6 fds at a time
+ * as that's more than enough for Samba
+ * and it means we can keep the logic simple
+ * and work with fixed size arrays.
+ *
+ * We also keep sizeof(struct swrap_unix_scm_rights)
+ * under PIPE_BUF (4096) in order to allow a non-blocking
+ * write into the pipe.
+ */
+#ifndef PIPE_BUF
+#define PIPE_BUF 4096
+#endif
+#define SWRAP_MAX_PASSED_FDS ((size_t)6)
+#define SWRAP_MAX_PASSED_SOCKET_INFO SWRAP_MAX_PASSED_FDS
+struct swrap_unix_scm_rights_payload {
+	uint8_t num_idxs;
+	int8_t idxs[SWRAP_MAX_PASSED_FDS];
+	struct socket_info infos[SWRAP_MAX_PASSED_SOCKET_INFO];
+};
+struct swrap_unix_scm_rights {
+	uint64_t magic;
+	char package_name[sizeof(SOCKET_WRAPPER_PACKAGE)];
+	char package_version[sizeof(SOCKET_WRAPPER_VERSION)];
+	uint32_t full_size;
+	uint32_t payload_size;
+	struct swrap_unix_scm_rights_payload payload;
+};
+
+static void swrap_dec_fd_passed_array(size_t num, struct socket_info **array)
+{
+	int saved_errno = errno;
+	size_t i;
+
+	for (i = 0; i < num; i++) {
+		struct socket_info *si = array[i];
+		if (si == NULL) {
+			continue;
+		}
+
+		SWRAP_LOCK_SI(si);
+		swrap_dec_refcount(si);
+		if (si->fd_passed > 0) {
+			si->fd_passed -= 1;
+		}
+		SWRAP_UNLOCK_SI(si);
+		array[i] = NULL;
+	}
+
+	errno = saved_errno;
+}
+
+static void swrap_undo_si_idx_array(size_t num, int *array)
+{
+	int saved_errno = errno;
+	size_t i;
+
+	swrap_mutex_lock(&first_free_mutex);
+
+	for (i = 0; i < num; i++) {
+		struct socket_info *si = NULL;
+
+		if (array[i] == -1) {
+			continue;
+		}
+
+		si = swrap_get_socket_info(array[i]);
+		if (si == NULL) {
+			continue;
+		}
+
+		SWRAP_LOCK_SI(si);
+		swrap_dec_refcount(si);
+		SWRAP_UNLOCK_SI(si);
+
+		swrap_set_next_free(si, first_free);
+		first_free = array[i];
+		array[i] = -1;
+	}
+
+	swrap_mutex_unlock(&first_free_mutex);
+	errno = saved_errno;
+}
+
+static void swrap_close_fd_array(size_t num, const int *array)
+{
+	int saved_errno = errno;
+	size_t i;
+
+	for (i = 0; i < num; i++) {
+		if (array[i] == -1) {
+			continue;
+		}
+		libc_close(array[i]);
+	}
+
+	errno = saved_errno;
+}
+
+union __swrap_fds {
+	const uint8_t *p;
+	int *fds;
+};
+
+union __swrap_cmsghdr {
+	const uint8_t *p;
+	struct cmsghdr *cmsg;
+};
+
+static int swrap_sendmsg_unix_scm_rights(const struct cmsghdr *cmsg,
+					 uint8_t **cm_data,
+					 size_t *cm_data_space,
+					 int *scm_rights_pipe_fd)
+{
+	struct swrap_unix_scm_rights info;
+	struct swrap_unix_scm_rights_payload *payload = NULL;
+	int si_idx_array[SWRAP_MAX_PASSED_FDS];
+	struct socket_info *si_array[SWRAP_MAX_PASSED_FDS] = { NULL, };
+	size_t info_idx = 0;
+	size_t size_fds_in;
+	size_t num_fds_in;
+	union __swrap_fds __fds_in = { .p = NULL, };
+	const int *fds_in = NULL;
+	size_t num_fds_out;
+	size_t size_fds_out;
+	union __swrap_fds __fds_out = { .p = NULL, };
+	int *fds_out = NULL;
+	size_t cmsg_len;
+	size_t cmsg_space;
+	size_t new_cm_data_space;
+	union __swrap_cmsghdr __new_cmsg = { .p = NULL, };
+	struct cmsghdr *new_cmsg = NULL;
+	uint8_t *p = NULL;
+	size_t i;
+	int pipefd[2] = { -1, -1 };
+	int rc;
+	ssize_t sret;
+
+	/*
+	 * We pass this a buffer to the kernel make sure any padding
+	 * is also cleared.
+	 */
+	ZERO_STRUCT(info);
+	info.magic = swrap_unix_scm_right_magic;
+	memcpy(info.package_name,
+	       SOCKET_WRAPPER_PACKAGE,
+	       sizeof(info.package_name));
+	memcpy(info.package_version,
+	       SOCKET_WRAPPER_VERSION,
+	       sizeof(info.package_version));
+	info.full_size = sizeof(info);
+	info.payload_size = sizeof(info.payload);
+	payload = &info.payload;
+
+	if (*scm_rights_pipe_fd != -1) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "Two SCM_RIGHTS headers are not supported by socket_wrapper");
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (cmsg->cmsg_len < CMSG_LEN(0)) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "cmsg->cmsg_len=%zu < CMSG_LEN(0)=%zu",
+			  (size_t)cmsg->cmsg_len,
+			  CMSG_LEN(0));
+		errno = EINVAL;
+		return -1;
+	}
+	size_fds_in = cmsg->cmsg_len - CMSG_LEN(0);
+	if ((size_fds_in % sizeof(int)) != 0) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "cmsg->cmsg_len=%zu => (size_fds_in=%zu %% sizeof(int)=%zu) != 0",
+			  (size_t)cmsg->cmsg_len,
+			  size_fds_in,
+			  sizeof(int));
+		errno = EINVAL;
+		return -1;
+	}
+	num_fds_in = size_fds_in / sizeof(int);
+	if (num_fds_in > SWRAP_MAX_PASSED_FDS) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "cmsg->cmsg_len=%zu,size_fds_in=%zu => "
+			  "num_fds_in=%zu > "
+			  "SWRAP_MAX_PASSED_FDS(%zu)",
+			  (size_t)cmsg->cmsg_len,
+			  size_fds_in,
+			  num_fds_in,
+			  SWRAP_MAX_PASSED_FDS);
+		errno = EINVAL;
+		return -1;
+	}
+	if (num_fds_in == 0) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "cmsg->cmsg_len=%zu,size_fds_in=%zu => "
+			  "num_fds_in=%zu",
+			  (size_t)cmsg->cmsg_len,
+			  size_fds_in,
+			  num_fds_in);
+		errno = EINVAL;
+		return -1;
+	}
+	__fds_in.p = CMSG_DATA(cmsg);
+	fds_in = __fds_in.fds;
+	num_fds_out = num_fds_in + 1;
+
+	SWRAP_LOG(SWRAP_LOG_TRACE,
+		  "num_fds_in=%zu num_fds_out=%zu",
+		  num_fds_in, num_fds_out);
+
+	size_fds_out = sizeof(int) * num_fds_out;
+	cmsg_len = CMSG_LEN(size_fds_out);
+	cmsg_space = CMSG_SPACE(size_fds_out);
+
+	new_cm_data_space = *cm_data_space + cmsg_space;
+
+	p = realloc((*cm_data), new_cm_data_space);
+	if (p == NULL) {
+		return -1;
+	}
+	(*cm_data) = p;
+	p = (*cm_data) + (*cm_data_space);
+	memset(p, 0, cmsg_space);
+	__new_cmsg.p = p;
+	new_cmsg = __new_cmsg.cmsg;
+	*new_cmsg = *cmsg;
+	__fds_out.p = CMSG_DATA(new_cmsg);
+	fds_out = __fds_out.fds;
+	memcpy(fds_out, fds_in, size_fds_out);
+	new_cmsg->cmsg_len = cmsg->cmsg_len;
+
+	for (i = 0; i < num_fds_in; i++) {
+		size_t j;
+
+		payload->idxs[i] = -1;
+		payload->num_idxs++;
+
+		si_idx_array[i] = find_socket_info_index(fds_in[i]);
+		if (si_idx_array[i] == -1) {
+			continue;
+		}
+
+		si_array[i] = swrap_get_socket_info(si_idx_array[i]);
+		if (si_array[i] == NULL) {
+			SWRAP_LOG(SWRAP_LOG_ERROR,
+				  "fds_in[%zu]=%d si_idx_array[%zu]=%d missing!",
+				  i, fds_in[i], i, si_idx_array[i]);
+			errno = EINVAL;
+			return -1;
+		}
+
+		for (j = 0; j < i; j++) {
+			if (si_array[j] == si_array[i]) {
+				payload->idxs[i] = payload->idxs[j];
+				break;
+			}
+		}
+		if (payload->idxs[i] == -1) {
+			if (info_idx >= SWRAP_MAX_PASSED_SOCKET_INFO) {
+				SWRAP_LOG(SWRAP_LOG_ERROR,
+					  "fds_in[%zu]=%d,si_idx_array[%zu]=%d: "
+					  "info_idx=%zu >= SWRAP_MAX_PASSED_FDS(%zu)!",
+					  i, fds_in[i], i, si_idx_array[i],
+					  info_idx,
+					  SWRAP_MAX_PASSED_SOCKET_INFO);
+				errno = EINVAL;
+				return -1;
+			}
+			payload->idxs[i] = info_idx;
+			info_idx += 1;
+			continue;
+		}
+	}
+
+	for (i = 0; i < num_fds_in; i++) {
+		struct socket_info *si = si_array[i];
+
+		if (si == NULL) {
+			SWRAP_LOG(SWRAP_LOG_TRACE,
+				  "fds_in[%zu]=%d not an inet socket",
+				  i, fds_in[i]);
+			continue;
+		}
+
+		SWRAP_LOG(SWRAP_LOG_TRACE,
+			  "fds_in[%zu]=%d si_idx_array[%zu]=%d "
+			  "passing as info.idxs[%zu]=%d!",
+			  i, fds_in[i],
+			  i, si_idx_array[i],
+			  i, payload->idxs[i]);
+
+		SWRAP_LOCK_SI(si);
+		si->fd_passed += 1;
+		payload->infos[payload->idxs[i]] = *si;
+		payload->infos[payload->idxs[i]].fd_passed = 0;
+		SWRAP_UNLOCK_SI(si);
+	}
+
+	rc = pipe(pipefd);
+	if (rc == -1) {
+		int saved_errno = errno;
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "pipe() failed - %d %s",
+			  saved_errno,
+			  strerror(saved_errno));
+		swrap_dec_fd_passed_array(num_fds_in, si_array);
+		errno = saved_errno;
+		return -1;
+	}
+
+	sret = write(pipefd[1], &info, sizeof(info));
+	if (sret != sizeof(info)) {
+		int saved_errno = errno;
+		if (sret != -1) {
+			saved_errno = EINVAL;
+		}
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "write() failed - sret=%zd - %d %s",
+			  sret, saved_errno,
+			  strerror(saved_errno));
+		swrap_dec_fd_passed_array(num_fds_in, si_array);
+		libc_close(pipefd[1]);
+		libc_close(pipefd[0]);
+		errno = saved_errno;
+		return -1;
+	}
+	libc_close(pipefd[1]);
+
+	/*
+	 * Add the pipe read end to the end of the passed fd array
+	 */
+	fds_out[num_fds_in] = pipefd[0];
+	new_cmsg->cmsg_len = cmsg_len;
+
+	/* we're done ... */
+	*scm_rights_pipe_fd = pipefd[0];
+	*cm_data_space = new_cm_data_space;
+
+	return 0;
+}
+
+static int swrap_sendmsg_unix_sol_socket(const struct cmsghdr *cmsg,
+					 uint8_t **cm_data,
+					 size_t *cm_data_space,
+					 int *scm_rights_pipe_fd)
+{
+	int rc = -1;
+
+	switch (cmsg->cmsg_type) {
+	case SCM_RIGHTS:
+		rc = swrap_sendmsg_unix_scm_rights(cmsg,
+						   cm_data,
+						   cm_data_space,
+						   scm_rights_pipe_fd);
+		break;
+	default:
+		rc = swrap_sendmsg_copy_cmsg(cmsg,
+					     cm_data,
+					     cm_data_space);
+		break;
+	}
+
+	return rc;
+}
+
+static int swrap_recvmsg_unix_scm_rights(const struct cmsghdr *cmsg,
+					 uint8_t **cm_data,
+					 size_t *cm_data_space)
+{
+	int scm_rights_pipe_fd = -1;
+	struct swrap_unix_scm_rights info;
+	struct swrap_unix_scm_rights_payload *payload = NULL;
+	int si_idx_array[SWRAP_MAX_PASSED_FDS];
+	size_t size_fds_in;
+	size_t num_fds_in;
+	union __swrap_fds __fds_in = { .p = NULL, };
+	const int *fds_in = NULL;
+	size_t num_fds_out;
+	size_t size_fds_out;
+	union __swrap_fds __fds_out = { .p = NULL, };
+	int *fds_out = NULL;
+	size_t cmsg_len;
+	size_t cmsg_space;
+	size_t new_cm_data_space;
+	union __swrap_cmsghdr __new_cmsg = { .p = NULL, };
+	struct cmsghdr *new_cmsg = NULL;
+	uint8_t *p = NULL;
+	ssize_t sret;
+	size_t i;
+	int cmp;
+
+	if (cmsg->cmsg_len < CMSG_LEN(0)) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "cmsg->cmsg_len=%zu < CMSG_LEN(0)=%zu",
+			  (size_t)cmsg->cmsg_len,
+			  CMSG_LEN(0));
+		errno = EINVAL;
+		return -1;
+	}
+	size_fds_in = cmsg->cmsg_len - CMSG_LEN(0);
+	if ((size_fds_in % sizeof(int)) != 0) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "cmsg->cmsg_len=%zu => (size_fds_in=%zu %% sizeof(int)=%zu) != 0",
+			  (size_t)cmsg->cmsg_len,
+			  size_fds_in,
+			  sizeof(int));
+		errno = EINVAL;
+		return -1;
+	}
+	num_fds_in = size_fds_in / sizeof(int);
+	if (num_fds_in > (SWRAP_MAX_PASSED_FDS + 1)) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "cmsg->cmsg_len=%zu,size_fds_in=%zu => "
+			  "num_fds_in=%zu > SWRAP_MAX_PASSED_FDS+1(%zu)",
+			  (size_t)cmsg->cmsg_len,
+			  size_fds_in,
+			  num_fds_in,
+			  SWRAP_MAX_PASSED_FDS+1);
+		errno = EINVAL;
+		return -1;
+	}
+	if (num_fds_in <= 1) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "cmsg->cmsg_len=%zu,size_fds_in=%zu => "
+			  "num_fds_in=%zu",
+			  (size_t)cmsg->cmsg_len,
+			  size_fds_in,
+			  num_fds_in);
+		errno = EINVAL;
+		return -1;
+	}
+	__fds_in.p = CMSG_DATA(cmsg);
+	fds_in = __fds_in.fds;
+	num_fds_out = num_fds_in - 1;
+
+	SWRAP_LOG(SWRAP_LOG_TRACE,
+		  "num_fds_in=%zu num_fds_out=%zu",
+		  num_fds_in, num_fds_out);
+
+	for (i = 0; i < num_fds_in; i++) {
+		/* Check if we have a stale fd and remove it */
+		swrap_remove_stale(fds_in[i]);
+	}
+
+	scm_rights_pipe_fd = fds_in[num_fds_out];
+	size_fds_out = sizeof(int) * num_fds_out;
+	cmsg_len = CMSG_LEN(size_fds_out);
+	cmsg_space = CMSG_SPACE(size_fds_out);
+
+	new_cm_data_space = *cm_data_space + cmsg_space;
+
+	p = realloc((*cm_data), new_cm_data_space);
+	if (p == NULL) {
+		swrap_close_fd_array(num_fds_in, fds_in);
+		return -1;
+	}
+	(*cm_data) = p;
+	p = (*cm_data) + (*cm_data_space);
+	memset(p, 0, cmsg_space);
+	__new_cmsg.p = p;
+	new_cmsg = __new_cmsg.cmsg;
+	*new_cmsg = *cmsg;
+	__fds_out.p = CMSG_DATA(new_cmsg);
+	fds_out = __fds_out.fds;
+	memcpy(fds_out, fds_in, size_fds_out);
+	new_cmsg->cmsg_len = cmsg_len;
+
+	sret = read(scm_rights_pipe_fd, &info, sizeof(info));
+	if (sret != sizeof(info)) {
+		int saved_errno = errno;
+		if (sret != -1) {
+			saved_errno = EINVAL;
+		}
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "read() failed - sret=%zd - %d %s",
+			  sret, saved_errno,
+			  strerror(saved_errno));
+		swrap_close_fd_array(num_fds_in, fds_in);
+		errno = saved_errno;
+		return -1;
+	}
+	libc_close(scm_rights_pipe_fd);
+	payload = &info.payload;
+
+	if (info.magic != swrap_unix_scm_right_magic) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "info.magic=0x%llx != swrap_unix_scm_right_magic=0x%llx",
+			  (unsigned long long)info.magic,
+			  (unsigned long long)swrap_unix_scm_right_magic);
+		swrap_close_fd_array(num_fds_out, fds_out);
+		errno = EINVAL;
+		return -1;
+	}
+
+	cmp = memcmp(info.package_name,
+		     SOCKET_WRAPPER_PACKAGE,
+		     sizeof(info.package_name));
+	if (cmp != 0) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "info.package_name='%.*s' != '%s'",
+			  (int)sizeof(info.package_name),
+			  info.package_name,
+			  SOCKET_WRAPPER_PACKAGE);
+		swrap_close_fd_array(num_fds_out, fds_out);
+		errno = EINVAL;
+		return -1;
+	}
+
+	cmp = memcmp(info.package_version,
+		     SOCKET_WRAPPER_VERSION,
+		     sizeof(info.package_version));
+	if (cmp != 0) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "info.package_version='%.*s' != '%s'",
+			  (int)sizeof(info.package_version),
+			  info.package_version,
+			  SOCKET_WRAPPER_VERSION);
+		swrap_close_fd_array(num_fds_out, fds_out);
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (info.full_size != sizeof(info)) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "info.full_size=%zu != sizeof(info)=%zu",
+			  (size_t)info.full_size,
+			  sizeof(info));
+		swrap_close_fd_array(num_fds_out, fds_out);
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (info.payload_size != sizeof(info.payload)) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "info.payload_size=%zu != sizeof(info.payload)=%zu",
+			  (size_t)info.payload_size,
+			  sizeof(info.payload));
+		swrap_close_fd_array(num_fds_out, fds_out);
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (payload->num_idxs != num_fds_out) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "info.num_idxs=%u != num_fds_out=%zu",
+			  payload->num_idxs, num_fds_out);
+		swrap_close_fd_array(num_fds_out, fds_out);
+		errno = EINVAL;
+		return -1;
+	}
+
+	for (i = 0; i < num_fds_out; i++) {
+		size_t j;
+
+		si_idx_array[i] = -1;
+
+		if (payload->idxs[i] == -1) {
+			SWRAP_LOG(SWRAP_LOG_TRACE,
+				  "fds_out[%zu]=%d not an inet socket",
+				  i, fds_out[i]);
+			continue;
+		}
+
+		if (payload->idxs[i] < 0) {
+			SWRAP_LOG(SWRAP_LOG_ERROR,
+				  "fds_out[%zu]=%d info.idxs[%zu]=%d < 0!",
+				  i, fds_out[i], i, payload->idxs[i]);
+			swrap_close_fd_array(num_fds_out, fds_out);
+			errno = EINVAL;
+			return -1;
+		}
+
+		if (payload->idxs[i] >= payload->num_idxs) {
+			SWRAP_LOG(SWRAP_LOG_ERROR,
+				  "fds_out[%zu]=%d info.idxs[%zu]=%d >= %u!",
+				  i, fds_out[i], i, payload->idxs[i],
+				  payload->num_idxs);
+			swrap_close_fd_array(num_fds_out, fds_out);
+			errno = EINVAL;
+			return -1;
+		}
+
+		if ((size_t)fds_out[i] >= socket_fds_max) {
+			SWRAP_LOG(SWRAP_LOG_ERROR,
+				  "The max socket index limit of %zu has been reached, "
+				  "trying to add %d",
+				  socket_fds_max,
+				  fds_out[i]);
+			swrap_close_fd_array(num_fds_out, fds_out);
+			errno = EMFILE;
+			return -1;
+		}
+
+		SWRAP_LOG(SWRAP_LOG_TRACE,
+			  "fds_in[%zu]=%d "
+			  "received as info.idxs[%zu]=%d!",
+			  i, fds_out[i],
+			  i, payload->idxs[i]);
+
+		for (j = 0; j < i; j++) {
+			if (payload->idxs[j] == -1) {
+				continue;
+			}
+			if (payload->idxs[j] == payload->idxs[i]) {
+				si_idx_array[i] = si_idx_array[j];
+			}
+		}
+		if (si_idx_array[i] == -1) {
+			const struct socket_info *si = &payload->infos[payload->idxs[i]];
+
+			si_idx_array[i] = swrap_add_socket_info(si);
+			if (si_idx_array[i] == -1) {
+				int saved_errno = errno;
+				SWRAP_LOG(SWRAP_LOG_ERROR,
+					  "The max socket index limit of %zu has been reached, "
+					  "trying to add %d",
+					  socket_fds_max,
+					  fds_out[i]);
+				swrap_undo_si_idx_array(i, si_idx_array);
+				swrap_close_fd_array(num_fds_out, fds_out);
+				errno = saved_errno;
+				return -1;
+			}
+			SWRAP_LOG(SWRAP_LOG_TRACE,
+				  "Imported %s socket for protocol %s, fd=%d",
+				  si->family == AF_INET ? "IPv4" : "IPv6",
+				  si->type == SOCK_DGRAM ? "UDP" : "TCP",
+				  fds_out[i]);
+		}
+	}
+
+	for (i = 0; i < num_fds_out; i++) {
+		if (si_idx_array[i] == -1) {
+			continue;
+		}
+		set_socket_info_index(fds_out[i], si_idx_array[i]);
+	}
+
+	/* we're done ... */
+	*cm_data_space = new_cm_data_space;
+
+	return 0;
+}
+
+static int swrap_recvmsg_unix_sol_socket(const struct cmsghdr *cmsg,
+					 uint8_t **cm_data,
+					 size_t *cm_data_space)
+{
+	int rc = -1;
+
+	switch (cmsg->cmsg_type) {
+	case SCM_RIGHTS:
+		rc = swrap_recvmsg_unix_scm_rights(cmsg,
+						   cm_data,
+						   cm_data_space);
+		break;
+	default:
+		rc = swrap_sendmsg_copy_cmsg(cmsg,
+					     cm_data,
+					     cm_data_space);
+		break;
+	}
+
+	return rc;
+}
+
 #endif /* HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 
 static int swrap_sendmsg_before_unix(const struct msghdr *_msg_in,
-				     struct msghdr *msg_tmp)
+				     struct msghdr *msg_tmp,
+				     int *scm_rights_pipe_fd)
 {
 #ifdef HAVE_STRUCT_MSGHDR_MSG_CONTROL
 	struct msghdr *msg_in = discard_const_p(struct msghdr, _msg_in);
@@ -5165,6 +5840,7 @@ static int swrap_sendmsg_before_unix(const struct msghdr *_msg_in,
 	int rc = -1;
 
 	*msg_tmp = *msg_in;
+	*scm_rights_pipe_fd = -1;
 
 	/* Nothing to do */
 	if (msg_in->msg_controllen == 0 || msg_in->msg_control == NULL) {
@@ -5175,6 +5851,13 @@ static int swrap_sendmsg_before_unix(const struct msghdr *_msg_in,
 	     cmsg != NULL;
 	     cmsg = CMSG_NXTHDR(msg_in, cmsg)) {
 		switch (cmsg->cmsg_level) {
+		case SOL_SOCKET:
+			rc = swrap_sendmsg_unix_sol_socket(cmsg,
+							   &cm_data,
+							   &cm_data_space,
+							   scm_rights_pipe_fd);
+			break;
+
 		default:
 			rc = swrap_sendmsg_copy_cmsg(cmsg,
 						     &cm_data,
@@ -5200,11 +5883,15 @@ static int swrap_sendmsg_before_unix(const struct msghdr *_msg_in,
 }
 
 static ssize_t swrap_sendmsg_after_unix(struct msghdr *msg_tmp,
-					ssize_t ret)
+					ssize_t ret,
+					int scm_rights_pipe_fd)
 {
 #ifdef HAVE_STRUCT_MSGHDR_MSG_CONTROL
 	int saved_errno = errno;
 	SAFE_FREE(msg_tmp->msg_control);
+	if (scm_rights_pipe_fd != -1) {
+		libc_close(scm_rights_pipe_fd);
+	}
 	errno = saved_errno;
 #endif /* HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 	return ret;
@@ -5221,6 +5908,49 @@ static ssize_t swrap_recvmsg_after_unix(struct msghdr *msg_tmp,
 					struct msghdr *msg_out,
 					ssize_t ret)
 {
+#ifdef HAVE_STRUCT_MSGHDR_MSG_CONTROL
+	struct cmsghdr *cmsg = NULL;
+	uint8_t *cm_data = NULL;
+	size_t cm_data_space = 0;
+	int rc = -1;
+
+	/* Nothing to do */
+	if (msg_tmp->msg_controllen == 0 || msg_tmp->msg_control == NULL) {
+		goto done;
+	}
+
+	for (cmsg = CMSG_FIRSTHDR(msg_tmp);
+	     cmsg != NULL;
+	     cmsg = CMSG_NXTHDR(msg_tmp, cmsg)) {
+		switch (cmsg->cmsg_level) {
+		case SOL_SOCKET:
+			rc = swrap_recvmsg_unix_sol_socket(cmsg,
+							   &cm_data,
+							   &cm_data_space);
+			break;
+
+		default:
+			rc = swrap_sendmsg_copy_cmsg(cmsg,
+						     &cm_data,
+						     &cm_data_space);
+			break;
+		}
+		if (rc < 0) {
+			int saved_errno = errno;
+			SAFE_FREE(cm_data);
+			errno = saved_errno;
+			return rc;
+		}
+	}
+
+	/*
+	 * msg_tmp->msg_control is still the buffer of the caller.
+	 */
+	memcpy(msg_tmp->msg_control, cm_data, cm_data_space);
+	msg_tmp->msg_controllen = cm_data_space;
+	SAFE_FREE(cm_data);
+done:
+#endif /* ! HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 	*msg_out = *msg_tmp;
 	return ret;
 }
@@ -6265,12 +6995,15 @@ static ssize_t swrap_sendmsg(int s, const struct msghdr *omsg, int flags)
 	int bcast = 0;
 
 	if (!si) {
-		rc = swrap_sendmsg_before_unix(omsg, &msg);
+		int scm_rights_pipe_fd = -1;
+
+		rc = swrap_sendmsg_before_unix(omsg, &msg,
+					       &scm_rights_pipe_fd);
 		if (rc < 0) {
 			return rc;
 		}
 		ret = libc_sendmsg(s, &msg, flags);
-		return swrap_sendmsg_after_unix(&msg, ret);
+		return swrap_sendmsg_after_unix(&msg, ret, scm_rights_pipe_fd);
 	}
 
 	ZERO_STRUCT(un_addr);
@@ -6559,6 +7292,10 @@ static int swrap_close(int fd)
 		goto out;
 	}
 
+	if (si->fd_passed) {
+		goto set_next_free;
+	}
+
 	if (si->myname.sa_socklen > 0 && si->peername.sa_socklen > 0) {
 		swrap_pcap_dump_packet(si, NULL, SWRAP_CLOSE_SEND, NULL, 0);
 	}
@@ -6572,6 +7309,7 @@ static int swrap_close(int fd)
 		unlink(si->un_addr.sun_path);
 	}
 
+set_next_free:
 	swrap_set_next_free(si, first_free);
 	first_free = si_index;
 
@@ -6847,6 +7585,19 @@ static void swrap_thread_child(void)
  ***************************/
 void swrap_constructor(void)
 {
+	if (PIPE_BUF < sizeof(struct swrap_unix_scm_rights)) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "PIPE_BUF=%zu < "
+			  "sizeof(struct swrap_unix_scm_rights)=%zu\n"
+			  "sizeof(struct swrap_unix_scm_rights_payload)=%zu "
+			  "sizeof(struct socket_info)=%zu",
+			  (size_t)PIPE_BUF,
+			  sizeof(struct swrap_unix_scm_rights),
+			  sizeof(struct swrap_unix_scm_rights_payload),
+			  sizeof(struct socket_info));
+		exit(-1);
+	}
+
 	SWRAP_REINIT_ALL;
 
 	/*
