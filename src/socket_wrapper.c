@@ -5026,6 +5026,13 @@ static int swrap_sendmsg_filter_cmsghdr(const struct msghdr *_msg,
 						     cm_data_space);
 			break;
 		}
+		if (rc < 0) {
+			int saved_errno = errno;
+			SAFE_FREE(*cm_data);
+			*cm_data_space = 0;
+			errno = saved_errno;
+			return rc;
+		}
 	}
 
 	return rc;
