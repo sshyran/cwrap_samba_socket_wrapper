@@ -5151,13 +5151,56 @@ static int swrap_sendmsg_filter_cmsg_sol_socket(const struct cmsghdr *cmsg,
 static int swrap_sendmsg_before_unix(const struct msghdr *_msg_in,
 				     struct msghdr *msg_tmp)
 {
+#ifdef HAVE_STRUCT_MSGHDR_MSG_CONTROL
+	struct msghdr *msg_in = discard_const_p(struct msghdr, _msg_in);
+	struct cmsghdr *cmsg = NULL;
+	uint8_t *cm_data = NULL;
+	size_t cm_data_space = 0;
+	int rc = -1;
+
+	*msg_tmp = *msg_in;
+
+	/* Nothing to do */
+	if (msg_in->msg_controllen == 0 || msg_in->msg_control == NULL) {
+		return 0;
+	}
+
+	for (cmsg = CMSG_FIRSTHDR(msg_in);
+	     cmsg != NULL;
+	     cmsg = CMSG_NXTHDR(msg_in, cmsg)) {
+		switch (cmsg->cmsg_level) {
+		default:
+			rc = swrap_sendmsg_copy_cmsg(cmsg,
+						     &cm_data,
+						     &cm_data_space);
+			break;
+		}
+		if (rc < 0) {
+			int saved_errno = errno;
+			SAFE_FREE(cm_data);
+			errno = saved_errno;
+			return rc;
+		}
+	}
+
+	msg_tmp->msg_controllen = cm_data_space;
+	msg_tmp->msg_control = cm_data;
+
+	return 0;
+#else /* HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 	*msg_tmp = *_msg_in;
 	return 0;
+#endif /* ! HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 }
 
 static ssize_t swrap_sendmsg_after_unix(struct msghdr *msg_tmp,
 					ssize_t ret)
 {
+#ifdef HAVE_STRUCT_MSGHDR_MSG_CONTROL
+	int saved_errno = errno;
+	SAFE_FREE(msg_tmp->msg_control);
+	errno = saved_errno;
+#endif /* HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 	return ret;
 }
 
