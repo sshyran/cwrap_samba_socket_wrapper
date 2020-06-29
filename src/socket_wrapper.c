@@ -5148,6 +5148,34 @@ static int swrap_sendmsg_filter_cmsg_sol_socket(const struct cmsghdr *cmsg,
 
 #endif /* HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 
+static int swrap_sendmsg_before_unix(const struct msghdr *_msg_in,
+				     struct msghdr *msg_tmp)
+{
+	*msg_tmp = *_msg_in;
+	return 0;
+}
+
+static ssize_t swrap_sendmsg_after_unix(struct msghdr *msg_tmp,
+					ssize_t ret)
+{
+	return ret;
+}
+
+static int swrap_recvmsg_before_unix(struct msghdr *msg_in,
+				     struct msghdr *msg_tmp)
+{
+	*msg_tmp = *msg_in;
+	return 0;
+}
+
+static ssize_t swrap_recvmsg_after_unix(struct msghdr *msg_tmp,
+					struct msghdr *msg_out,
+					ssize_t ret)
+{
+	*msg_out = *msg_tmp;
+	return ret;
+}
+
 static ssize_t swrap_sendmsg_before(int fd,
 				    struct socket_info *si,
 				    struct msghdr *msg,
@@ -6060,7 +6088,12 @@ static ssize_t swrap_recvmsg(int s, struct msghdr *omsg, int flags)
 
 	si = find_socket_info(s);
 	if (si == NULL) {
-		return libc_recvmsg(s, omsg, flags);
+		rc = swrap_recvmsg_before_unix(omsg, &msg);
+		if (rc < 0) {
+			return rc;
+		}
+		ret = libc_recvmsg(s, &msg, flags);
+		return swrap_recvmsg_after_unix(&msg, omsg, ret);
 	}
 
 	tmp.iov_base = NULL;
@@ -6183,7 +6216,12 @@ static ssize_t swrap_sendmsg(int s, const struct msghdr *omsg, int flags)
 	int bcast = 0;
 
 	if (!si) {
-		return libc_sendmsg(s, omsg, flags);
+		rc = swrap_sendmsg_before_unix(omsg, &msg);
+		if (rc < 0) {
+			return rc;
+		}
+		ret = libc_sendmsg(s, &msg, flags);
+		return swrap_sendmsg_after_unix(&msg, ret);
 	}
 
 	ZERO_STRUCT(un_addr);
