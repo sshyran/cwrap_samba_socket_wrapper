@@ -4994,9 +4994,12 @@ static int swrap_msghdr_add_socket_info(struct socket_info *si,
 static int swrap_sendmsg_copy_cmsg(const struct cmsghdr *cmsg,
 				   uint8_t **cm_data,
 				   size_t *cm_data_space);
-static int swrap_sendmsg_filter_cmsg_socket(const struct cmsghdr *cmsg,
-					    uint8_t **cm_data,
-					    size_t *cm_data_space);
+static int swrap_sendmsg_filter_cmsg_ipproto_ip(const struct cmsghdr *cmsg,
+						uint8_t **cm_data,
+						size_t *cm_data_space);
+static int swrap_sendmsg_filter_cmsg_sol_socket(const struct cmsghdr *cmsg,
+						uint8_t **cm_data,
+						size_t *cm_data_space);
 
 static int swrap_sendmsg_filter_cmsghdr(const struct msghdr *_msg,
 					uint8_t **cm_data,
@@ -5016,9 +5019,14 @@ static int swrap_sendmsg_filter_cmsghdr(const struct msghdr *_msg,
 	     cmsg = CMSG_NXTHDR(msg, cmsg)) {
 		switch (cmsg->cmsg_level) {
 		case IPPROTO_IP:
-			rc = swrap_sendmsg_filter_cmsg_socket(cmsg,
-							      cm_data,
-							      cm_data_space);
+			rc = swrap_sendmsg_filter_cmsg_ipproto_ip(cmsg,
+								  cm_data,
+								  cm_data_space);
+			break;
+		case SOL_SOCKET:
+			rc = swrap_sendmsg_filter_cmsg_sol_socket(cmsg,
+								  cm_data,
+								  cm_data_space);
 			break;
 		default:
 			rc = swrap_sendmsg_copy_cmsg(cmsg,
@@ -5066,9 +5074,9 @@ static int swrap_sendmsg_filter_cmsg_pktinfo(const struct cmsghdr *cmsg,
 					    size_t *cm_data_space);
 
 
-static int swrap_sendmsg_filter_cmsg_socket(const struct cmsghdr *cmsg,
-					    uint8_t **cm_data,
-					    size_t *cm_data_space)
+static int swrap_sendmsg_filter_cmsg_ipproto_ip(const struct cmsghdr *cmsg,
+						uint8_t **cm_data,
+						size_t *cm_data_space)
 {
 	int rc = -1;
 
@@ -5108,6 +5116,36 @@ static int swrap_sendmsg_filter_cmsg_pktinfo(const struct cmsghdr *cmsg,
 	 */
 	return 0;
 }
+
+static int swrap_sendmsg_filter_cmsg_sol_socket(const struct cmsghdr *cmsg,
+						uint8_t **cm_data,
+						size_t *cm_data_space)
+{
+	int rc = -1;
+
+	switch (cmsg->cmsg_type) {
+	case SCM_RIGHTS:
+		SWRAP_LOG(SWRAP_LOG_TRACE,
+			  "Ignoring SCM_RIGHTS on inet socket!");
+		rc = 0;
+		break;
+#ifdef SCM_CREDENTIALS
+	case SCM_CREDENTIALS:
+		SWRAP_LOG(SWRAP_LOG_TRACE,
+			  "Ignoring SCM_CREDENTIALS on inet socket!");
+		rc = 0;
+		break;
+#endif /* SCM_CREDENTIALS */
+	default:
+		rc = swrap_sendmsg_copy_cmsg(cmsg,
+					     cm_data,
+					     cm_data_space);
+		break;
+	}
+
+	return rc;
+}
+
 #endif /* HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 
 static ssize_t swrap_sendmsg_before(int fd,
