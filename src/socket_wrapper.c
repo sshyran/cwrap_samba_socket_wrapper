@@ -1811,7 +1811,7 @@ static int find_socket_info_index(int fd)
 	return socket_fds_idx[fd];
 }
 
-static int swrap_add_socket_info(struct socket_info *si_input)
+static int swrap_add_socket_info(const struct socket_info *si_input)
 {
 	struct socket_info *si = NULL;
 	int si_index = -1;
