@@ -1854,6 +1854,7 @@ static int swrap_create_socket(struct socket_info *si, int fd)
 			  "trying to add %d",
 			  socket_fds_max,
 			  fd);
+		errno = EMFILE;
 		return -1;
 	}
 
@@ -2964,7 +2965,7 @@ static int swrap_pcap_get_fd(const char *fname)
 		file_hdr.link_type	= 0x0065; /* 101 RAW IP */
 
 		if (write(fd, &file_hdr, sizeof(file_hdr)) != sizeof(file_hdr)) {
-			close(fd);
+			libc_close(fd);
 			fd = -1;
 		}
 		return fd;
@@ -3469,6 +3470,9 @@ static int swrap_socket(int family, int type, int protocol)
 
 	ret = swrap_create_socket(si, fd);
 	if (ret == -1) {
+		int saved_errno = errno;
+		libc_close(fd);
+		errno = saved_errno;
 		return -1;
 	}
 
@@ -3639,7 +3643,7 @@ static int swrap_accept(int s,
 				       &in_addr.sa_socklen);
 	if (ret == -1) {
 		SWRAP_UNLOCK_SI(parent_si);
-		close(fd);
+		libc_close(fd);
 		return ret;
 	}
 
@@ -3671,7 +3675,7 @@ static int swrap_accept(int s,
 			       &un_my_addr.sa.s,
 			       &un_my_addr.sa_socklen);
 	if (ret == -1) {
-		close(fd);
+		libc_close(fd);
 		return ret;
 	}
 
@@ -3682,7 +3686,7 @@ static int swrap_accept(int s,
 				       &in_my_addr.sa.s,
 				       &in_my_addr.sa_socklen);
 	if (ret == -1) {
-		close(fd);
+		libc_close(fd);
 		return ret;
 	}
 
@@ -3697,7 +3701,9 @@ static int swrap_accept(int s,
 
 	idx = swrap_create_socket(&new_si, fd);
 	if (idx == -1) {
-		close (fd);
+		int saved_errno = errno;
+		libc_close(fd);
+		errno = saved_errno;
 		return -1;
 	}
 
@@ -6605,6 +6611,17 @@ static int swrap_dup(int fd)
 		return -1;
 	}
 
+	if ((size_t)dup_fd >= socket_fds_max) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "The max socket index limit of %zu has been reached, "
+			  "trying to add %d",
+			  socket_fds_max,
+			  dup_fd);
+		libc_close(dup_fd);
+		errno = EMFILE;
+		return -1;
+	}
+
 	SWRAP_LOCK_SI(si);
 
 	swrap_inc_refcount(si);
@@ -6648,6 +6665,16 @@ static int swrap_dup2(int fd, int newfd)
 		 * value as oldfd, then dup2() does nothing, and returns newfd."
 		 */
 		return newfd;
+	}
+
+	if ((size_t)newfd >= socket_fds_max) {
+		SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "The max socket index limit of %zu has been reached, "
+			  "trying to add %d",
+			  socket_fds_max,
+			  newfd);
+		errno = EMFILE;
+		return -1;
 	}
 
 	if (find_socket_info(newfd)) {
@@ -6707,14 +6734,26 @@ static int swrap_vfcntl(int fd, int cmd, va_list va)
 			return -1;
 		}
 
+		/* Make sure we don't have an entry for the fd */
+		swrap_remove_stale(dup_fd);
+
+		if ((size_t)dup_fd >= socket_fds_max) {
+			SWRAP_LOG(SWRAP_LOG_ERROR,
+			  "The max socket index limit of %zu has been reached, "
+			  "trying to add %d",
+			  socket_fds_max,
+			  dup_fd);
+			libc_close(dup_fd);
+			errno = EMFILE;
+			return -1;
+		}
+
 		SWRAP_LOCK_SI(si);
 
 		swrap_inc_refcount(si);
 
 		SWRAP_UNLOCK_SI(si);
 
-		/* Make sure we don't have an entry for the fd */
-		swrap_remove_stale(dup_fd);
 
 		set_socket_info_index(dup_fd, idx);
 
