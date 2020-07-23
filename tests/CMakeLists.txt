@@ -61,7 +61,7 @@ set(SWRAP_TESTS
     ${SWRAP_THREADED_TESTS})
 
 if (HAVE_STRUCT_MSGHDR_MSG_CONTROL)
-    set(SWRAP_TESTS ${SWRAP_TESTS} test_sendmsg_recvmsg_fd)
+    set(SWRAP_TESTS ${SWRAP_TESTS} test_sendmsg_recvmsg_fd test_echo_tcp_sendmsg_recvmsg_fd)
 endif (HAVE_STRUCT_MSGHDR_MSG_CONTROL)
 
 function(ADD_CMOCKA_TEST_ENVIRONMENT _TEST_NAME)
@@ -115,6 +115,10 @@ foreach(_SWRAP_TEST ${SWRAP_TESTS})
                     LINK_OPTIONS ${DEFAULT_LINK_FLAGS})
     add_cmocka_test_environment(${_SWRAP_TEST})
 endforeach()
+
+if (HAVE_STRUCT_MSGHDR_MSG_CONTROL)
+    set_tests_properties(test_echo_tcp_sendmsg_recvmsg_fd PROPERTIES WILL_FAIL TRUE)
+endif (HAVE_STRUCT_MSGHDR_MSG_CONTROL)
 
 if (HELGRIND_TESTING)
     find_program(VALGRIND_EXECUTABLE valgrind)
