@@ -217,6 +217,32 @@ int main(void) {
 }" HAVE_DESTRUCTOR_ATTRIBUTE)
 
 check_c_source_compiles("
+#pragma init (test_constructor)
+void test_constructor(void);
+
+void test_constructor(void)
+{
+    return;
+}
+
+int main(void) {
+    return 0;
+}" HAVE_PRAGMA_INIT)
+
+check_c_source_compiles("
+#pragma fini (test_destructor)
+void test_destructor(void);
+
+void test_destructor(void)
+{
+    return;
+}
+
+int main(void) {
+    return 0;
+}" HAVE_PRAGMA_FINI)
+
+check_c_source_compiles("
 #define FALL_THROUGH __attribute__((fallthrough))
 
 int main(void) {
