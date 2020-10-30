@@ -43,7 +43,10 @@
 #else
 #define CONSTRUCTOR_ATTRIBUTE
 #endif /* HAVE_CONSTRUCTOR_ATTRIBUTE */
-
+#if ! defined(HAVE_CONSTRUCTOR_ATTRIBUTE) && defined(HAVE_PRAGMA_INIT)
+/* xlC and other oldschool compilers support (only) this */
+#pragma init (thread_deadlock_constructor)
+#endif
 void thread_deadlock_constructor(void) CONSTRUCTOR_ATTRIBUTE;
 
 static void thread_deadlock_prepare(void)

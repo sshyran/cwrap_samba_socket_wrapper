@@ -334,7 +334,14 @@ static pthread_mutex_t mtu_update_mutex;
 
 bool socket_wrapper_enabled(void);
 
+#if ! defined(HAVE_CONSTRUCTOR_ATTRIBUTE) && defined(HAVE_PRAGMA_INIT)
+/* xlC and other oldschool compilers support (only) this */
+#pragma init (swrap_constructor)
+#endif
 void swrap_constructor(void) CONSTRUCTOR_ATTRIBUTE;
+#if ! defined(HAVE_DESTRUCTOR_ATTRIBUTE) && defined(HAVE_PRAGMA_FINI)
+#pragma fini (swrap_destructor)
+#endif
 void swrap_destructor(void) DESTRUCTOR_ATTRIBUTE;
 
 #ifndef HAVE_GETPROGNAME
