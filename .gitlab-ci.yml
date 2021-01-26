@@ -246,6 +246,9 @@ tumbleweed/helgrind:
     when: on_failure
     paths:
       - obj/
+  only:
+    variables:
+      - $VALGRIND_SUPPORTS_FORKED_MUTEXES == "yes"
 
 ubuntu/x86_64:
   image: $CI_REGISTRY/$BUILD_IMAGES_PROJECT:$UBUNTU_BUILD

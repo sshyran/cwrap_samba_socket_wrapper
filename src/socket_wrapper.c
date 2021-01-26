@@ -178,11 +178,56 @@ enum swrap_dbglvl_e {
 # endif
 #endif
 
+#define socket_wrapper_init_mutex(m) \
+	_socket_wrapper_init_mutex(m, #m)
+
 /* Add new global locks here please */
+# define SWRAP_REINIT_ALL do { \
+	size_t __i; \
+	int ret; \
+	ret = socket_wrapper_init_mutex(&sockets_mutex); \
+	if (ret != 0) exit(-1); \
+	ret = socket_wrapper_init_mutex(&socket_reset_mutex); \
+	if (ret != 0) exit(-1); \
+	ret = socket_wrapper_init_mutex(&first_free_mutex); \
+	if (ret != 0) exit(-1); \
+	for (__i = 0; (sockets != NULL) && __i < socket_info_max; __i++) { \
+		ret = socket_wrapper_init_mutex(&sockets[__i].meta.mutex); \
+		if (ret != 0) exit(-1); \
+	} \
+	ret = socket_wrapper_init_mutex(&autobind_start_mutex); \
+	if (ret != 0) exit(-1); \
+	ret = socket_wrapper_init_mutex(&pcap_dump_mutex); \
+	if (ret != 0) exit(-1); \
+	ret = socket_wrapper_init_mutex(&mtu_update_mutex); \
+	if (ret != 0) exit(-1); \
+} while(0)
+
 # define SWRAP_LOCK_ALL do { \
+	size_t __i; \
+	swrap_mutex_lock(&sockets_mutex); \
+	swrap_mutex_lock(&socket_reset_mutex); \
+	swrap_mutex_lock(&first_free_mutex); \
+	for (__i = 0; (sockets != NULL) && __i < socket_info_max; __i++) { \
+		swrap_mutex_lock(&sockets[__i].meta.mutex); \
+	} \
+	swrap_mutex_lock(&autobind_start_mutex); \
+	swrap_mutex_lock(&pcap_dump_mutex); \
+	swrap_mutex_lock(&mtu_update_mutex); \
 } while(0)
 
 # define SWRAP_UNLOCK_ALL do { \
+	size_t __s; \
+	swrap_mutex_unlock(&mtu_update_mutex); \
+	swrap_mutex_unlock(&pcap_dump_mutex); \
+	swrap_mutex_unlock(&autobind_start_mutex); \
+	for (__s = 0; (sockets != NULL) && __s < socket_info_max; __s++) { \
+		size_t __i = (socket_info_max - 1) - __s; \
+		swrap_mutex_unlock(&sockets[__i].meta.mutex); \
+	} \
+	swrap_mutex_unlock(&first_free_mutex); \
+	swrap_mutex_unlock(&socket_reset_mutex); \
+	swrap_mutex_unlock(&sockets_mutex); \
 } while(0)
 
 #define SOCKET_INFO_CONTAINER(si) \
@@ -253,7 +298,7 @@ struct swrap_address {
 	} sa;
 };
 
-int first_free;
+static int first_free;
 
 struct socket_info
 {
@@ -310,22 +355,22 @@ static size_t socket_fds_max = SOCKET_WRAPPER_MAX_SOCKETS_LIMIT;
 static int *socket_fds_idx;
 
 /* Mutex for syncronizing port selection during swrap_auto_bind() */
-static pthread_mutex_t autobind_start_mutex;
+static pthread_mutex_t autobind_start_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Mutex to guard the initialization of array of socket_info structures */
-static pthread_mutex_t sockets_mutex;
+static pthread_mutex_t sockets_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Mutex to guard the socket reset in swrap_close() and swrap_remove_stale() */
-static pthread_mutex_t socket_reset_mutex;
+static pthread_mutex_t socket_reset_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Mutex to synchronize access to first free index in socket_info array */
-static pthread_mutex_t first_free_mutex;
+static pthread_mutex_t first_free_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Mutex to synchronize access to packet capture dump file */
-static pthread_mutex_t pcap_dump_mutex;
+static pthread_mutex_t pcap_dump_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Mutex for synchronizing mtu value fetch*/
-static pthread_mutex_t mtu_update_mutex;
+static pthread_mutex_t mtu_update_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Function prototypes */
 
@@ -695,25 +740,27 @@ static void *_swrap_bind_symbol(enum swrap_lib lib, const char *fn_name)
 	return func;
 }
 
-static void swrap_mutex_lock(pthread_mutex_t *mutex)
+#define swrap_mutex_lock(m) _swrap_mutex_lock(m, #m, __func__, __LINE__)
+static void _swrap_mutex_lock(pthread_mutex_t *mutex, const char *name, const char *caller, unsigned line)
 {
 	int ret;
 
 	ret = pthread_mutex_lock(mutex);
 	if (ret != 0) {
-		SWRAP_LOG(SWRAP_LOG_ERROR, "Couldn't lock pthread mutex - %s",
-			  strerror(ret));
+		SWRAP_LOG(SWRAP_LOG_ERROR, "PID(%d):PPID(%d): %s(%u): Couldn't lock pthread mutex(%s) - %s",
+			  getpid(), getppid(), caller, line, name, strerror(ret));
 	}
 }
 
-static void swrap_mutex_unlock(pthread_mutex_t *mutex)
+#define swrap_mutex_unlock(m) _swrap_mutex_unlock(m, #m, __func__, __LINE__)
+static void _swrap_mutex_unlock(pthread_mutex_t *mutex, const char *name, const char *caller, unsigned line)
 {
 	int ret;
 
 	ret = pthread_mutex_unlock(mutex);
 	if (ret != 0) {
-		SWRAP_LOG(SWRAP_LOG_ERROR, "Couldn't unlock pthread mutex - %s",
-			  strerror(ret));
+		SWRAP_LOG(SWRAP_LOG_ERROR, "PID(%d):PPID(%d): %s(%u): Couldn't unlock pthread mutex(%s) - %s",
+			  getpid(), getppid(), caller, line, name, strerror(ret));
 	}
 }
 
@@ -1514,26 +1561,31 @@ done:
 	return max_mtu;
 }
 
-static int socket_wrapper_init_mutex(pthread_mutex_t *m)
+static int _socket_wrapper_init_mutex(pthread_mutex_t *m, const char *name)
 {
 	pthread_mutexattr_t ma;
-	int ret;
+	bool need_destroy = false;
+	int ret = 0;
 
-	ret = pthread_mutexattr_init(&ma);
-	if (ret != 0) {
-		return ret;
-	}
+#define __CHECK(cmd) do { \
+	ret = cmd; \
+	if (ret != 0) { \
+		SWRAP_LOG(SWRAP_LOG_ERROR, \
+			  "%s: %s - failed %d", \
+			  name, #cmd, ret); \
+		goto done; \
+	} \
+} while(0)
 
-	ret = pthread_mutexattr_settype(&ma, PTHREAD_MUTEX_ERRORCHECK);
-	if (ret != 0) {
-		goto done;
-	}
-
-	ret = pthread_mutex_init(m, &ma);
-
+	*m = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
+	__CHECK(pthread_mutexattr_init(&ma));
+	need_destroy = true;
+	__CHECK(pthread_mutexattr_settype(&ma, PTHREAD_MUTEX_ERRORCHECK));
+	__CHECK(pthread_mutex_init(m, &ma));
 done:
-	pthread_mutexattr_destroy(&ma);
-
+	if (need_destroy) {
+		pthread_mutexattr_destroy(&ma);
+	}
 	return ret;
 }
 
@@ -1608,7 +1660,7 @@ static void socket_wrapper_init_sockets(void)
 {
 	size_t max_sockets;
 	size_t i;
-	int ret;
+	int ret = 0;
 
 	swrap_bind_symbol_all();
 
@@ -1647,37 +1699,20 @@ static void socket_wrapper_init_sockets(void)
 
 	for (i = 0; i < max_sockets; i++) {
 		swrap_set_next_free(&sockets[i].info, i+1);
+		sockets[i].meta.mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
+	}
+
+	for (i = 0; i < max_sockets; i++) {
 		ret = socket_wrapper_init_mutex(&sockets[i].meta.mutex);
 		if (ret != 0) {
 			SWRAP_LOG(SWRAP_LOG_ERROR,
-				  "Failed to initialize pthread mutex");
+				  "Failed to initialize pthread mutex i=%zu", i);
 			goto done;
 		}
 	}
 
 	/* mark the end of the free list */
 	swrap_set_next_free(&sockets[max_sockets-1].info, -1);
-
-	ret = socket_wrapper_init_mutex(&autobind_start_mutex);
-	if (ret != 0) {
-		SWRAP_LOG(SWRAP_LOG_ERROR,
-			  "Failed to initialize pthread mutex");
-		goto done;
-	}
-
-	ret = socket_wrapper_init_mutex(&pcap_dump_mutex);
-	if (ret != 0) {
-		SWRAP_LOG(SWRAP_LOG_ERROR,
-			  "Failed to initialize pthread mutex");
-		goto done;
-	}
-
-	ret = socket_wrapper_init_mutex(&mtu_update_mutex);
-	if (ret != 0) {
-		SWRAP_LOG(SWRAP_LOG_ERROR,
-			  "Failed to initialize pthread mutex");
-		goto done;
-	}
 
 done:
 	swrap_mutex_unlock(&first_free_mutex);
@@ -6624,7 +6659,7 @@ static void swrap_thread_parent(void)
 
 static void swrap_thread_child(void)
 {
-	SWRAP_UNLOCK_ALL;
+	SWRAP_REINIT_ALL;
 }
 
 /****************************
@@ -6632,7 +6667,7 @@ static void swrap_thread_child(void)
  ***************************/
 void swrap_constructor(void)
 {
-	int ret;
+	SWRAP_REINIT_ALL;
 
 	/*
 	* If we hold a lock and the application forks, then the child
@@ -6642,27 +6677,6 @@ void swrap_constructor(void)
 	pthread_atfork(&swrap_thread_prepare,
 		       &swrap_thread_parent,
 		       &swrap_thread_child);
-
-	ret = socket_wrapper_init_mutex(&sockets_mutex);
-	if (ret != 0) {
-		SWRAP_LOG(SWRAP_LOG_ERROR,
-			  "Failed to initialize pthread mutex");
-		exit(-1);
-	}
-
-	ret = socket_wrapper_init_mutex(&socket_reset_mutex);
-	if (ret != 0) {
-		SWRAP_LOG(SWRAP_LOG_ERROR,
-			  "Failed to initialize pthread mutex");
-		exit(-1);
-	}
-
-	ret = socket_wrapper_init_mutex(&first_free_mutex);
-	if (ret != 0) {
-		SWRAP_LOG(SWRAP_LOG_ERROR,
-			  "Failed to initialize pthread mutex");
-		exit(-1);
-	}
 }
 
 /****************************
