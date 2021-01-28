@@ -1672,6 +1672,10 @@ static void socket_wrapper_init_sockets(void)
 		return;
 	}
 
+	SWRAP_LOG(SWRAP_LOG_DEBUG,
+		  "SOCKET_WRAPPER_PACKAGE[%s] SOCKET_WRAPPER_VERSION[%s]",
+		  SOCKET_WRAPPER_PACKAGE, SOCKET_WRAPPER_VERSION);
+
 	/*
 	 * Intialize the static cache early before
 	 * any thread is able to start.

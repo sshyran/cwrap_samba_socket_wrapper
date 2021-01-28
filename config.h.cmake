@@ -1,8 +1,8 @@
 /* Name of package */
-#cmakedefine PACKAGE "${PROJECT_NAME}"
+#cmakedefine SOCKET_WRAPPER_PACKAGE "${SOCKET_WRAPPER_PACKAGE}"
 
 /* Version number of package */
-#cmakedefine VERSION "${PROJECT_VERSION}"
+#cmakedefine SOCKET_WRAPPER_VERSION "${SOCKET_WRAPPER_VERSION}"
 
 #cmakedefine BINARYDIR "${BINARYDIR}"
 #cmakedefine SOURCEDIR "${SOURCEDIR}"

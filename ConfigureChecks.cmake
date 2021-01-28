@@ -7,8 +7,8 @@ include(CheckStructHasMember)
 include(CheckPrototypeDefinition)
 include(TestBigEndian)
 
-set(PACKAGE ${PROJECT_NAME})
-set(VERSION ${PROJECT_VERSION})
+set(SOCKET_WRAPPER_PACKAGE ${PROJECT_NAME})
+set(SOCKET_WRAPPER_VERSION ${PROJECT_VERSION})
 
 set(BINARYDIR ${CMAKE_BINARY_DIR})
 set(SOURCEDIR ${CMAKE_SOURCE_DIR})
