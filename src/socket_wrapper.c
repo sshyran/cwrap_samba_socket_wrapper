@@ -572,7 +572,6 @@ static char *socket_wrapper_dir(void);
 
 enum swrap_lib {
     SWRAP_LIBC,
-    SWRAP_LIBNSL,
     SWRAP_LIBSOCKET,
 };
 
@@ -581,8 +580,6 @@ static const char *swrap_str_lib(enum swrap_lib lib)
 	switch (lib) {
 	case SWRAP_LIBC:
 		return "libc";
-	case SWRAP_LIBNSL:
-		return "libnsl";
 	case SWRAP_LIBSOCKET:
 		return "libsocket";
 	}
@@ -620,7 +617,6 @@ static void *swrap_load_lib_handle(enum swrap_lib lib)
 #endif
 
 	switch (lib) {
-	case SWRAP_LIBNSL:
 	case SWRAP_LIBSOCKET:
 #ifdef HAVE_LIBSOCKET
 		handle = swrap.libc.socket_handle;
@@ -746,16 +742,6 @@ static void swrap_mutex_unlock(pthread_mutex_t *mutex)
 		if (swrap.libc.symbols._libc_##sym_name.obj == NULL) { \
 			swrap.libc.symbols._libc_##sym_name.obj = \
 				_swrap_bind_symbol(SWRAP_LIBSOCKET, #sym_name); \
-		} \
-		swrap_mutex_unlock(&libc_symbol_binding_mutex); \
-	}
-
-#define swrap_bind_symbol_libnsl(sym_name) \
-	if (swrap.libc.symbols._libc_##sym_name.obj == NULL) { \
-		swrap_mutex_lock(&libc_symbol_binding_mutex); \
-		if (swrap.libc.symbols._libc_##sym_name.obj == NULL) { \
-			swrap.libc.symbols._libc_##sym_name.obj = \
-				_swrap_bind_symbol(SWRAP_LIBNSL, #sym_name); \
 		} \
 		swrap_mutex_unlock(&libc_symbol_binding_mutex); \
 	}
