@@ -1475,7 +1475,7 @@ static char *socket_wrapper_dir(void)
 	char *t;
 	bool ok;
 
-	if (s == NULL) {
+	if (s == NULL || s[0] == '\0') {
 		SWRAP_LOG(SWRAP_LOG_WARN, "SOCKET_WRAPPER_DIR not set");
 		return NULL;
 	}
@@ -1483,7 +1483,8 @@ static char *socket_wrapper_dir(void)
 	swrap_dir = realpath(s, NULL);
 	if (swrap_dir == NULL) {
 		SWRAP_LOG(SWRAP_LOG_ERROR,
-			  "Unable to resolve socket_wrapper dir path: %s",
+			  "Unable to resolve socket_wrapper dir path: %s - %s",
+			  s,
 			  strerror(errno));
 		abort();
 	}
