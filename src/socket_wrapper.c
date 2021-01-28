@@ -726,25 +726,21 @@ static void swrap_mutex_unlock(pthread_mutex_t *mutex)
  * This is an optimization to avoid locking each time we check if the symbol is
  * bound.
  */
-#define swrap_bind_symbol_libc(sym_name) \
+#define _swrap_bind_symbol_generic(lib, sym_name) \
 	if (swrap.libc.symbols._libc_##sym_name.obj == NULL) { \
 		swrap_mutex_lock(&libc_symbol_binding_mutex); \
 		if (swrap.libc.symbols._libc_##sym_name.obj == NULL) { \
 			swrap.libc.symbols._libc_##sym_name.obj = \
-				_swrap_bind_symbol(SWRAP_LIBC, #sym_name); \
+				_swrap_bind_symbol(lib, #sym_name); \
 		} \
 		swrap_mutex_unlock(&libc_symbol_binding_mutex); \
 	}
 
+#define swrap_bind_symbol_libc(sym_name) \
+	_swrap_bind_symbol_generic(SWRAP_LIBC, sym_name)
+
 #define swrap_bind_symbol_libsocket(sym_name) \
-	if (swrap.libc.symbols._libc_##sym_name.obj == NULL) { \
-		swrap_mutex_lock(&libc_symbol_binding_mutex); \
-		if (swrap.libc.symbols._libc_##sym_name.obj == NULL) { \
-			swrap.libc.symbols._libc_##sym_name.obj = \
-				_swrap_bind_symbol(SWRAP_LIBSOCKET, #sym_name); \
-		} \
-		swrap_mutex_unlock(&libc_symbol_binding_mutex); \
-	}
+	_swrap_bind_symbol_generic(SWRAP_LIBSOCKET, sym_name)
 
 /****************************************************************************
  *                               IMPORTANT
