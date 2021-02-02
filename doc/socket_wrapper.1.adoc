@@ -132,3 +132,8 @@ EXAMPLE
   # (The client will use the address 127.0.0.100 when connecting to the server)
   # Now you can type 'Hello!' which will be sent to the server and should appear
   # in the console output of the server.
+
+RESOURCES
+---------
+
+*Project web site:* https://cwrap.org
