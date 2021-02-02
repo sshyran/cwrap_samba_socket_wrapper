@@ -1,3 +1,7 @@
 The manpage is written with asciidoc. To generate the manpage use:
 
-a2x --doctype manpage --format manpage doc/socket_wrapper.1.adoc
+    asciidoctor -b manpage doc/socket_wrapper.1.adoc
+
+or
+
+    a2x --format manpage doc/socket_wrapper.1.adoc

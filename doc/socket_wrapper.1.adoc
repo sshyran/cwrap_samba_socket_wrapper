@@ -2,6 +2,7 @@ socket_wrapper(1)
 =================
 :revdate: 2021-02-01
 :author: Samba Team
+:doctype: manpage
 
 NAME
 ----
