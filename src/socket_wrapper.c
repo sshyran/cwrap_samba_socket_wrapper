@@ -183,7 +183,6 @@ enum swrap_dbglvl_e {
 
 /* Add new global locks here please */
 # define SWRAP_REINIT_ALL do { \
-	size_t __i; \
 	int ret; \
 	ret = socket_wrapper_init_mutex(&sockets_mutex); \
 	if (ret != 0) exit(-1); \
@@ -191,10 +190,8 @@ enum swrap_dbglvl_e {
 	if (ret != 0) exit(-1); \
 	ret = socket_wrapper_init_mutex(&first_free_mutex); \
 	if (ret != 0) exit(-1); \
-	for (__i = 0; (sockets != NULL) && __i < socket_info_max; __i++) { \
-		ret = socket_wrapper_init_mutex(&sockets[__i].meta.mutex); \
-		if (ret != 0) exit(-1); \
-	} \
+	ret = socket_wrapper_init_mutex(&sockets_si_global); \
+	if (ret != 0) exit(-1); \
 	ret = socket_wrapper_init_mutex(&autobind_start_mutex); \
 	if (ret != 0) exit(-1); \
 	ret = socket_wrapper_init_mutex(&pcap_dump_mutex); \
@@ -204,27 +201,20 @@ enum swrap_dbglvl_e {
 } while(0)
 
 # define SWRAP_LOCK_ALL do { \
-	size_t __i; \
 	swrap_mutex_lock(&sockets_mutex); \
 	swrap_mutex_lock(&socket_reset_mutex); \
 	swrap_mutex_lock(&first_free_mutex); \
-	for (__i = 0; (sockets != NULL) && __i < socket_info_max; __i++) { \
-		swrap_mutex_lock(&sockets[__i].meta.mutex); \
-	} \
+	swrap_mutex_lock(&sockets_si_global); \
 	swrap_mutex_lock(&autobind_start_mutex); \
 	swrap_mutex_lock(&pcap_dump_mutex); \
 	swrap_mutex_lock(&mtu_update_mutex); \
 } while(0)
 
 # define SWRAP_UNLOCK_ALL do { \
-	size_t __s; \
 	swrap_mutex_unlock(&mtu_update_mutex); \
 	swrap_mutex_unlock(&pcap_dump_mutex); \
 	swrap_mutex_unlock(&autobind_start_mutex); \
-	for (__s = 0; (sockets != NULL) && __s < socket_info_max; __s++) { \
-		size_t __i = (socket_info_max - 1) - __s; \
-		swrap_mutex_unlock(&sockets[__i].meta.mutex); \
-	} \
+	swrap_mutex_unlock(&sockets_si_global); \
 	swrap_mutex_unlock(&first_free_mutex); \
 	swrap_mutex_unlock(&socket_reset_mutex); \
 	swrap_mutex_unlock(&sockets_mutex); \
@@ -235,12 +225,20 @@ enum swrap_dbglvl_e {
 
 #define SWRAP_LOCK_SI(si) do { \
 	struct socket_info_container *sic = SOCKET_INFO_CONTAINER(si); \
-	swrap_mutex_lock(&sic->meta.mutex); \
+	if (sic != NULL) { \
+		swrap_mutex_lock(&sockets_si_global); \
+	} else { \
+		abort(); \
+	} \
 } while(0)
 
 #define SWRAP_UNLOCK_SI(si) do { \
 	struct socket_info_container *sic = SOCKET_INFO_CONTAINER(si); \
-	swrap_mutex_unlock(&sic->meta.mutex); \
+	if (sic != NULL) { \
+		swrap_mutex_unlock(&sockets_si_global); \
+	} else { \
+		abort(); \
+	} \
 } while(0)
 
 #if defined(HAVE_GETTIMEOFDAY_TZ) || defined(HAVE_GETTIMEOFDAY_TZ_VOID)
@@ -337,7 +335,13 @@ struct socket_info_meta
 {
 	unsigned int refcount;
 	int next_free;
-	pthread_mutex_t mutex;
+	/*
+	 * As long as we don't use shared memory
+	 * for the sockets array, we use
+	 * sockets_si_global as a single mutex.
+	 *
+	 * pthread_mutex_t mutex;
+	 */
 };
 
 struct socket_info_container
@@ -371,6 +375,14 @@ static pthread_mutex_t socket_reset_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Mutex to synchronize access to first free index in socket_info array */
 static pthread_mutex_t first_free_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/*
+ * Mutex to synchronize access to to socket_info structures
+ * We use a single global mutex in order to avoid leaking
+ * ~ 38M copy on write memory per fork.
+ * max_sockets=65535 * sizeof(struct socket_info_container)=592 = 38796720
+ */
+static pthread_mutex_t sockets_si_global = PTHREAD_MUTEX_INITIALIZER;
 
 /* Mutex to synchronize access to packet capture dump file */
 static pthread_mutex_t pcap_dump_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -1707,27 +1719,18 @@ static void socket_wrapper_init_sockets(void)
 	}
 
 	swrap_mutex_lock(&first_free_mutex);
+	swrap_mutex_lock(&sockets_si_global);
 
 	first_free = 0;
 
 	for (i = 0; i < max_sockets; i++) {
 		swrap_set_next_free(&sockets[i].info, i+1);
-		sockets[i].meta.mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
-	}
-
-	for (i = 0; i < max_sockets; i++) {
-		ret = socket_wrapper_init_mutex(&sockets[i].meta.mutex);
-		if (ret != 0) {
-			SWRAP_LOG(SWRAP_LOG_ERROR,
-				  "Failed to initialize pthread mutex i=%zu", i);
-			goto done;
-		}
 	}
 
 	/* mark the end of the free list */
 	swrap_set_next_free(&sockets[max_sockets-1].info, -1);
 
-done:
+	swrap_mutex_unlock(&sockets_si_global);
 	swrap_mutex_unlock(&first_free_mutex);
 	swrap_mutex_unlock(&sockets_mutex);
 	if (ret != 0) {
