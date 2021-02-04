@@ -5962,8 +5962,48 @@ static ssize_t swrap_sendmsg_after_unix(struct msghdr *msg_tmp,
 static int swrap_recvmsg_before_unix(struct msghdr *msg_in,
 				     struct msghdr *msg_tmp)
 {
+#ifdef HAVE_STRUCT_MSGHDR_MSG_CONTROL
+	const size_t cm_extra_space = CMSG_SPACE(sizeof(int));
+	uint8_t *cm_data = NULL;
+	size_t cm_data_space = 0;
+
+	*msg_tmp = *msg_in;
+
+	SWRAP_LOG(SWRAP_LOG_TRACE,
+		  "msg_in->msg_controllen=%zu",
+		  (size_t)msg_in->msg_controllen);
+
+	/* Nothing to do */
+	if (msg_in->msg_controllen == 0 || msg_in->msg_control == NULL) {
+		return 0;
+	}
+
+	/*
+	 * We need to give the kernel a bit more space in order
+	 * recv the pipe fd, added by swrap_sendmsg_before_unix()).
+	 * swrap_recvmsg_after_unix() will hide it again.
+	 */
+	cm_data_space = msg_in->msg_controllen;
+	if (cm_data_space < (INT32_MAX - cm_extra_space)) {
+		cm_data_space += cm_extra_space;
+	}
+	cm_data = calloc(1, cm_data_space);
+	if (cm_data == NULL) {
+		return -1;
+	}
+	memcpy(cm_data, msg_in->msg_control, msg_in->msg_controllen);
+
+	msg_tmp->msg_controllen = cm_data_space;
+	msg_tmp->msg_control = cm_data;
+
+	SWRAP_LOG(SWRAP_LOG_TRACE,
+		  "msg_tmp->msg_controllen=%zu",
+		  (size_t)msg_tmp->msg_controllen);
+	return 0;
+#else /* HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 	*msg_tmp = *msg_in;
 	return 0;
+#endif /* ! HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 }
 
 static ssize_t swrap_recvmsg_after_unix(struct msghdr *msg_tmp,
@@ -5976,9 +6016,14 @@ static ssize_t swrap_recvmsg_after_unix(struct msghdr *msg_tmp,
 	size_t cm_data_space = 0;
 	int rc = -1;
 
+	SWRAP_LOG(SWRAP_LOG_TRACE,
+		  "msg_tmp->msg_controllen=%zu",
+		  (size_t)msg_tmp->msg_controllen);
+
 	/* Nothing to do */
 	if (msg_tmp->msg_controllen == 0 || msg_tmp->msg_control == NULL) {
-		goto done;
+		*msg_out = *msg_tmp;
+		return ret;
 	}
 
 	for (cmsg = CMSG_FIRSTHDR(msg_tmp);
@@ -6006,15 +6051,27 @@ static ssize_t swrap_recvmsg_after_unix(struct msghdr *msg_tmp,
 	}
 
 	/*
-	 * msg_tmp->msg_control is still the buffer of the caller.
+	 * msg_tmp->msg_control was created by swrap_recvmsg_before_unix()
+	 * and msg_out->msg_control is still the buffer of the caller.
 	 */
-	memcpy(msg_tmp->msg_control, cm_data, cm_data_space);
-	msg_tmp->msg_controllen = cm_data_space;
+	SAFE_FREE(msg_tmp->msg_control);
+	msg_tmp->msg_control = msg_out->msg_control;
+	msg_tmp->msg_controllen = msg_out->msg_controllen;
+	*msg_out = *msg_tmp;
+
+	cm_data_space = MIN(cm_data_space, msg_out->msg_controllen);
+	memcpy(msg_out->msg_control, cm_data, cm_data_space);
+	msg_out->msg_controllen = cm_data_space;
 	SAFE_FREE(cm_data);
-done:
-#endif /* ! HAVE_STRUCT_MSGHDR_MSG_CONTROL */
+
+	SWRAP_LOG(SWRAP_LOG_TRACE,
+		  "msg_out->msg_controllen=%zu",
+		  (size_t)msg_out->msg_controllen);
+	return ret;
+#else /* HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 	*msg_out = *msg_tmp;
 	return ret;
+#endif /* ! HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 }
 
 static ssize_t swrap_sendmsg_before(int fd,
