@@ -277,13 +277,58 @@ static void test_tcp_sendmsg_recvmsg_fd_1(void **state)
 	test_tcp_sendmsg_recvmsg_fd_same(1);
 }
 
+static void test_tcp_sendmsg_recvmsg_fd_2s(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_same(2);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_3s(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_same(3);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_4s(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_same(4);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_5s(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_same(5);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_6s(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_same(6);
+}
+
 int main(void) {
 	int rc;
 
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_1,
 				 setup_echo_srv_tcp_ipv4,
-				 teardown)
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_2s,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_3s,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_4s,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_5s,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_6s,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
 	};
 
 	rc = cmocka_run_group_tests(tests, NULL, NULL);
