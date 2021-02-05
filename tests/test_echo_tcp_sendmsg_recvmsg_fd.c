@@ -307,6 +307,73 @@ static void test_tcp_sendmsg_recvmsg_fd_6s(void **state)
 	test_tcp_sendmsg_recvmsg_fd_same(6);
 }
 
+static void test_tcp_sendmsg_recvmsg_fd_different(size_t num_fds)
+{
+	int fd_array[num_fds];
+	size_t idx;
+
+	for (idx = 0; idx < num_fds; idx++) {
+		struct torture_address addr = {
+			.sa_socklen = sizeof(struct sockaddr_in),
+		};
+		int pass_sock_fd;
+		int rc;
+
+		/* create socket file descriptor to be passed */
+		pass_sock_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		assert_int_not_equal(pass_sock_fd, -1);
+
+		addr.sa.in.sin_family = AF_INET;
+		addr.sa.in.sin_port = htons(torture_server_port());
+
+		rc = inet_pton(addr.sa.in.sin_family,
+			       torture_server_address(AF_INET),
+			       &addr.sa.in.sin_addr);
+		assert_int_equal(rc, 1);
+
+		rc = connect(pass_sock_fd, &addr.sa.s, addr.sa_socklen);
+		assert_int_equal(rc, 0);
+
+		fd_array[idx] = pass_sock_fd;
+	}
+
+	test_tcp_sendmsg_recvmsg_fd_array(fd_array, num_fds);
+
+	for (idx = 0; idx < num_fds; idx++) {
+		close(fd_array[idx]);
+	}
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_2d(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_different(2);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_3d(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_different(3);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_4d(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_different(4);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_5d(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_different(5);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_6d(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_different(6);
+}
+
 int main(void) {
 	int rc;
 
@@ -327,6 +394,21 @@ int main(void) {
 				 setup_echo_srv_tcp_ipv4,
 				 teardown),
 		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_6s,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_2d,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_3d,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_4d,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_5d,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_6d,
 				 setup_echo_srv_tcp_ipv4,
 				 teardown),
 	};
