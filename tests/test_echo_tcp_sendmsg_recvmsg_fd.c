@@ -178,6 +178,14 @@ static void test_tcp_sendmsg_recvmsg_fd_array(const int *fds, size_t num_fds)
 				continue;
 			}
 
+			if (tfds[idx].sock_addr.sa.s.sa_family == AF_UNIX) {
+				/*
+				 * skip fds not belonging to
+				 * a socket.
+				 */
+				continue;
+			}
+
 			snprintf(send_buf, sizeof(send_buf), "packet");
 
 			ret = write(recv_fd,
@@ -374,6 +382,145 @@ static void test_tcp_sendmsg_recvmsg_fd_6d(void **state)
 	test_tcp_sendmsg_recvmsg_fd_different(6);
 }
 
+static void test_tcp_sendmsg_recvmsg_fd_mixed(size_t num_fds)
+{
+	int fd_array[num_fds];
+	int close_array[num_fds];
+	size_t idx;
+
+	for (idx = 0; idx < num_fds; idx++) {
+		fd_array[idx] = -1;
+		close_array[idx] = -1;
+	}
+
+	/*
+	 * We send
+	 * 0: AF_UNIX
+	 * 1: TCP
+	 * 2: /dev/null
+	 * 3: pipe
+	 * 4: AF_UNIX
+	 * 5: TCP
+	 * 6: /dev/null
+	 * 7: pipe
+	 * .
+	 * .
+	 * .
+	 *
+	 */
+
+	for (idx = 0; idx < num_fds; idx++) {
+		int sv[2];
+		int rc;
+
+		if ((idx % 4) == 0) {
+			rc = socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
+			assert_int_not_equal(rc, -1);
+		} else if ((idx % 4) == 2) {
+			rc = pipe(sv);
+			assert_int_not_equal(rc, -1);
+		} else {
+			continue;
+		}
+
+		fd_array[idx] = sv[0];
+		close_array[idx] = sv[1];
+	}
+
+	for (idx = 0; idx < num_fds; idx++) {
+		struct torture_address addr = {
+			.sa_socklen = sizeof(struct sockaddr_in),
+		};
+		int pass_sock_fd;
+		int rc;
+
+		if ((idx % 4) != 1) {
+			continue;
+		}
+
+		/* create socket file descriptor to be passed */
+		pass_sock_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		assert_int_not_equal(pass_sock_fd, -1);
+
+		addr.sa.in.sin_family = AF_INET;
+		addr.sa.in.sin_port = htons(torture_server_port());
+
+		rc = inet_pton(addr.sa.in.sin_family,
+			       torture_server_address(AF_INET),
+			       &addr.sa.in.sin_addr);
+		assert_int_equal(rc, 1);
+
+		rc = connect(pass_sock_fd, &addr.sa.s, addr.sa_socklen);
+		assert_int_equal(rc, 0);
+
+		fd_array[idx] = pass_sock_fd;
+	}
+
+	for (idx = 0; idx < num_fds; idx++) {
+		int pass_fd;
+
+		if ((idx % 4) != 3) {
+			continue;
+		}
+
+		/* create socket file descriptor to be passed */
+		pass_fd = open("/dev/null", O_RDWR);
+		assert_int_not_equal(pass_fd, -1);
+
+		fd_array[idx] = pass_fd;
+	}
+
+	for (idx = 0; idx < num_fds; idx++) {
+		assert_int_not_equal(fd_array[idx], -1);
+	}
+
+	test_tcp_sendmsg_recvmsg_fd_array(fd_array, num_fds);
+
+	for (idx = 0; idx < num_fds; idx++) {
+		close(fd_array[idx]);
+		if (close_array[idx] == -1) {
+			continue;
+		}
+		close(close_array[idx]);
+	}
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_1m(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_mixed(1);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_2m(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_mixed(2);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_3m(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_mixed(3);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_4m(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_mixed(4);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_5m(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_mixed(5);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_6m(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_mixed(6);
+}
+
 int main(void) {
 	int rc;
 
@@ -409,6 +556,24 @@ int main(void) {
 				 setup_echo_srv_tcp_ipv4,
 				 teardown),
 		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_6d,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_1m,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_2m,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_3m,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_4m,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_5m,
+				 setup_echo_srv_tcp_ipv4,
+				 teardown),
+		cmocka_unit_test_setup_teardown(test_tcp_sendmsg_recvmsg_fd_6m,
 				 setup_echo_srv_tcp_ipv4,
 				 teardown),
 	};
