@@ -1885,22 +1885,28 @@ static int convert_un_in(const struct sockaddr_un *un, struct sockaddr *in, sock
 	if (p) p++; else p = un->sun_path;
 
 	if (sscanf(p, SOCKET_FORMAT, &type, &iface, &prt) != 3) {
+		SWRAP_LOG(SWRAP_LOG_ERROR, "sun_path[%s] p[%s]",
+			  un->sun_path, p);
 		errno = EINVAL;
 		return -1;
 	}
 
-	SWRAP_LOG(SWRAP_LOG_TRACE, "type %c iface %u port %u",
-			type, iface, prt);
-
 	if (iface == 0 || iface > MAX_WRAPPED_INTERFACES) {
+		SWRAP_LOG(SWRAP_LOG_ERROR, "type %c iface %u port %u",
+			  type, iface, prt);
 		errno = EINVAL;
 		return -1;
 	}
 
 	if (prt > 0xFFFF) {
+		SWRAP_LOG(SWRAP_LOG_ERROR, "type %c iface %u port %u",
+			  type, iface, prt);
 		errno = EINVAL;
 		return -1;
 	}
+
+	SWRAP_LOG(SWRAP_LOG_TRACE, "type %c iface %u port %u",
+		  type, iface, prt);
 
 	switch(type) {
 	case SOCKET_TYPE_CHAR_TCP:
@@ -1908,8 +1914,11 @@ static int convert_un_in(const struct sockaddr_un *un, struct sockaddr *in, sock
 		struct sockaddr_in *in2 = (struct sockaddr_in *)(void *)in;
 
 		if ((*len) < sizeof(*in2)) {
-		    errno = EINVAL;
-		    return -1;
+			SWRAP_LOG(SWRAP_LOG_ERROR,
+				  "V4: *len(%zu) < sizeof(*in2)=%zu",
+				  (size_t)*len, sizeof(*in2));
+			errno = EINVAL;
+			return -1;
 		}
 
 		memset(in2, 0, sizeof(*in2));
@@ -1926,6 +1935,10 @@ static int convert_un_in(const struct sockaddr_un *un, struct sockaddr *in, sock
 		struct sockaddr_in6 *in2 = (struct sockaddr_in6 *)(void *)in;
 
 		if ((*len) < sizeof(*in2)) {
+			SWRAP_LOG(SWRAP_LOG_ERROR,
+				  "V6: *len(%zu) < sizeof(*in2)=%zu",
+				  (size_t)*len, sizeof(*in2));
+			SWRAP_LOG(SWRAP_LOG_ERROR, "LINE:%d", __LINE__);
 			errno = EINVAL;
 			return -1;
 		}
@@ -1941,6 +1954,8 @@ static int convert_un_in(const struct sockaddr_un *un, struct sockaddr *in, sock
 	}
 #endif
 	default:
+		SWRAP_LOG(SWRAP_LOG_ERROR, "type %c iface %u port %u",
+			  type, iface, prt);
 		errno = EINVAL;
 		return -1;
 	}
