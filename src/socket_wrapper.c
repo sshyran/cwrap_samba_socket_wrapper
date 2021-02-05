@@ -3656,6 +3656,33 @@ static int swrap_accept(int s,
 	/* Check if we have a stale fd and remove it */
 	swrap_remove_stale(fd);
 
+	if (un_addr.sa.un.sun_path[0] == '\0') {
+		/*
+		 * FreeBSD seems to have a problem where
+		 * accept4() on the unix socket doesn't
+		 * ECONNABORTED for already disconnected connections.
+		 *
+		 * Let's try libc_getpeername() to get the peer address
+		 * as a fallback, but it'll likely return ENOTCONN,
+		 * which we have to map to ECONNABORTED.
+		 */
+		un_addr.sa_socklen = sizeof(struct sockaddr_un),
+		ret = libc_getpeername(fd, &un_addr.sa.s, &un_addr.sa_socklen);
+		if (ret == -1) {
+			int saved_errno = errno;
+			libc_close(fd);
+			if (saved_errno == ENOTCONN) {
+				/*
+				 * If the connection is already disconnected
+				 * we should return ECONNABORTED.
+				 */
+				saved_errno = ECONNABORTED;
+			}
+			errno = saved_errno;
+			return ret;
+		}
+	}
+
 	ret = libc_getsockname(fd,
 			       &un_my_addr.sa.s,
 			       &un_my_addr.sa_socklen);
