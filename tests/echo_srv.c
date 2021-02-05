@@ -537,6 +537,7 @@ static void echo_tcp(int sock)
     pid_t pid;
 
     while (1) {
+        waitpid(-1, NULL, WNOHANG);
         s = accept(sock, &addr.sa.s, &addr.sa_socklen);
         if (s == -1 && errno == ECONNABORTED) {
             continue;
@@ -575,7 +576,6 @@ static void echo_tcp(int sock)
             close(s);
             exit(0);
         }
-        waitpid(-1, NULL, 0);
         close(s);
     }
 
