@@ -237,15 +237,15 @@ static void test_tcp_sendmsg_recvmsg_fd_array(const int *fds, size_t num_fds)
 	}
 }
 
-static void test_tcp_sendmsg_recvmsg_fd_1(void **state)
+static void test_tcp_sendmsg_recvmsg_fd_same(size_t num_fds)
 {
 	struct torture_address addr = {
 		.sa_socklen = sizeof(struct sockaddr_in),
 	};
 	int pass_sock_fd;
+	int fd_array[num_fds];
+	size_t idx;
 	int rc;
-
-	(void) state; /* unused */
 
 	/* create socket file descriptor to be passed */
 	pass_sock_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -262,7 +262,19 @@ static void test_tcp_sendmsg_recvmsg_fd_1(void **state)
 	rc = connect(pass_sock_fd, &addr.sa.s, addr.sa_socklen);
 	assert_int_equal(rc, 0);
 
-	test_tcp_sendmsg_recvmsg_fd_array(&pass_sock_fd, 1);
+	for (idx = 0; idx < num_fds; idx++) {
+		fd_array[idx] = pass_sock_fd;
+	}
+
+	test_tcp_sendmsg_recvmsg_fd_array(fd_array, num_fds);
+
+	close(pass_sock_fd);
+}
+
+static void test_tcp_sendmsg_recvmsg_fd_1(void **state)
+{
+	(void) state; /* unused */
+	test_tcp_sendmsg_recvmsg_fd_same(1);
 }
 
 int main(void) {
