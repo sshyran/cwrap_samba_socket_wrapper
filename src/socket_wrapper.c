@@ -755,6 +755,7 @@ static void _swrap_mutex_lock(pthread_mutex_t *mutex, const char *name, const ch
 	if (ret != 0) {
 		SWRAP_LOG(SWRAP_LOG_ERROR, "PID(%d):PPID(%d): %s(%u): Couldn't lock pthread mutex(%s) - %s",
 			  getpid(), getppid(), caller, line, name, strerror(ret));
+		abort();
 	}
 }
 
@@ -767,6 +768,7 @@ static void _swrap_mutex_unlock(pthread_mutex_t *mutex, const char *name, const 
 	if (ret != 0) {
 		SWRAP_LOG(SWRAP_LOG_ERROR, "PID(%d):PPID(%d): %s(%u): Couldn't unlock pthread mutex(%s) - %s",
 			  getpid(), getppid(), caller, line, name, strerror(ret));
+		abort();
 	}
 }
 
