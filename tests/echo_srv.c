@@ -538,6 +538,9 @@ static void echo_tcp(int sock)
 
     while (1) {
         s = accept(sock, &addr.sa.s, &addr.sa_socklen);
+        if (s == -1 && errno == ECONNABORTED) {
+            continue;
+        }
         if (s == -1) {
             perror("accept");
             goto done;
