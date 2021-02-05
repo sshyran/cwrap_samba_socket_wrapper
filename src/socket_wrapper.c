@@ -5450,7 +5450,7 @@ static int swrap_sendmsg_unix_scm_rights(const struct cmsghdr *cmsg,
 	*new_cmsg = *cmsg;
 	__fds_out.p = CMSG_DATA(new_cmsg);
 	fds_out = __fds_out.fds;
-	memcpy(fds_out, fds_in, size_fds_out);
+	memcpy(fds_out, fds_in, size_fds_in);
 	new_cmsg->cmsg_len = cmsg->cmsg_len;
 
 	for (i = 0; i < num_fds_in; i++) {
