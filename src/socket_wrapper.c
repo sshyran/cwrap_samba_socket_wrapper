@@ -3642,10 +3642,12 @@ static int swrap_accept(int s,
 	ret = libc_accept(s, &un_addr.sa.s, &un_addr.sa_socklen);
 #endif
 	if (ret == -1) {
-		if (errno == ENOTSOCK) {
+		int saved_errno = errno;
+		if (saved_errno == ENOTSOCK) {
 			/* Remove stale fds */
 			swrap_remove_stale(s);
 		}
+		errno = saved_errno;
 		return ret;
 	}
 
@@ -3653,6 +3655,23 @@ static int swrap_accept(int s,
 
 	/* Check if we have a stale fd and remove it */
 	swrap_remove_stale(fd);
+
+	ret = libc_getsockname(fd,
+			       &un_my_addr.sa.s,
+			       &un_my_addr.sa_socklen);
+	if (ret == -1) {
+		int saved_errno = errno;
+		libc_close(fd);
+		if (saved_errno == ENOTCONN) {
+			/*
+			 * If the connection is already disconnected
+			 * we should return ECONNABORTED.
+			 */
+			saved_errno = ECONNABORTED;
+		}
+		errno = saved_errno;
+		return ret;
+	}
 
 	SWRAP_LOCK_SI(parent_si);
 
@@ -3663,8 +3682,10 @@ static int swrap_accept(int s,
 				       &in_addr.sa.s,
 				       &in_addr.sa_socklen);
 	if (ret == -1) {
+		int saved_errno = errno;
 		SWRAP_UNLOCK_SI(parent_si);
 		libc_close(fd);
+		errno = saved_errno;
 		return ret;
 	}
 
@@ -3692,14 +3713,6 @@ static int swrap_accept(int s,
 		*addrlen = in_addr.sa_socklen;
 	}
 
-	ret = libc_getsockname(fd,
-			       &un_my_addr.sa.s,
-			       &un_my_addr.sa_socklen);
-	if (ret == -1) {
-		libc_close(fd);
-		return ret;
-	}
-
 	ret = sockaddr_convert_from_un(child_si,
 				       &un_my_addr.sa.un,
 				       un_my_addr.sa_socklen,
@@ -3707,7 +3720,9 @@ static int swrap_accept(int s,
 				       &in_my_addr.sa.s,
 				       &in_my_addr.sa_socklen);
 	if (ret == -1) {
+		int saved_errno = errno;
 		libc_close(fd);
+		errno = saved_errno;
 		return ret;
 	}
 
