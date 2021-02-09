@@ -6021,6 +6021,16 @@ static ssize_t swrap_recvmsg_after_unix(struct msghdr *msg_tmp,
 	size_t cm_data_space = 0;
 	int rc = -1;
 
+	if (ret < 0) {
+		int saved_errno = errno;
+		SWRAP_LOG(SWRAP_LOG_TRACE, "ret=%zd - %d - %s", ret,
+			  saved_errno, strerror(saved_errno));
+		SAFE_FREE(*tmp_control);
+		/* msg_out should not be touched on error */
+		errno = saved_errno;
+		return ret;
+	}
+
 	SWRAP_LOG(SWRAP_LOG_TRACE,
 		  "msg_tmp->msg_controllen=%zu",
 		  (size_t)msg_tmp->msg_controllen);
