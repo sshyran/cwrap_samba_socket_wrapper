@@ -5960,7 +5960,8 @@ static ssize_t swrap_sendmsg_after_unix(struct msghdr *msg_tmp,
 }
 
 static int swrap_recvmsg_before_unix(struct msghdr *msg_in,
-				     struct msghdr *msg_tmp)
+				     struct msghdr *msg_tmp,
+				     uint8_t **tmp_control)
 {
 #ifdef HAVE_STRUCT_MSGHDR_MSG_CONTROL
 	const size_t cm_extra_space = CMSG_SPACE(sizeof(int));
@@ -5968,6 +5969,7 @@ static int swrap_recvmsg_before_unix(struct msghdr *msg_in,
 	size_t cm_data_space = 0;
 
 	*msg_tmp = *msg_in;
+	*tmp_control = NULL;
 
 	SWRAP_LOG(SWRAP_LOG_TRACE,
 		  "msg_in->msg_controllen=%zu",
@@ -5995,6 +5997,7 @@ static int swrap_recvmsg_before_unix(struct msghdr *msg_in,
 
 	msg_tmp->msg_controllen = cm_data_space;
 	msg_tmp->msg_control = cm_data;
+	*tmp_control = cm_data;
 
 	SWRAP_LOG(SWRAP_LOG_TRACE,
 		  "msg_tmp->msg_controllen=%zu",
@@ -6002,11 +6005,13 @@ static int swrap_recvmsg_before_unix(struct msghdr *msg_in,
 	return 0;
 #else /* HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 	*msg_tmp = *msg_in;
+	*tmp_control = NULL;
 	return 0;
 #endif /* ! HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 }
 
 static ssize_t swrap_recvmsg_after_unix(struct msghdr *msg_tmp,
+					uint8_t **tmp_control,
 					struct msghdr *msg_out,
 					ssize_t ret)
 {
@@ -6022,7 +6027,10 @@ static ssize_t swrap_recvmsg_after_unix(struct msghdr *msg_tmp,
 
 	/* Nothing to do */
 	if (msg_tmp->msg_controllen == 0 || msg_tmp->msg_control == NULL) {
+		int saved_errno = errno;
 		*msg_out = *msg_tmp;
+		SAFE_FREE(*tmp_control);
+		errno = saved_errno;
 		return ret;
 	}
 
@@ -6045,16 +6053,17 @@ static ssize_t swrap_recvmsg_after_unix(struct msghdr *msg_tmp,
 		if (rc < 0) {
 			int saved_errno = errno;
 			SAFE_FREE(cm_data);
+			SAFE_FREE(*tmp_control);
 			errno = saved_errno;
 			return rc;
 		}
 	}
 
 	/*
-	 * msg_tmp->msg_control was created by swrap_recvmsg_before_unix()
-	 * and msg_out->msg_control is still the buffer of the caller.
+	 * msg_tmp->msg_control (*tmp_control) was created by
+	 * swrap_recvmsg_before_unix() and msg_out->msg_control
+	 * is still the buffer of the caller.
 	 */
-	SAFE_FREE(msg_tmp->msg_control);
 	msg_tmp->msg_control = msg_out->msg_control;
 	msg_tmp->msg_controllen = msg_out->msg_controllen;
 	*msg_out = *msg_tmp;
@@ -6063,13 +6072,17 @@ static ssize_t swrap_recvmsg_after_unix(struct msghdr *msg_tmp,
 	memcpy(msg_out->msg_control, cm_data, cm_data_space);
 	msg_out->msg_controllen = cm_data_space;
 	SAFE_FREE(cm_data);
+	SAFE_FREE(*tmp_control);
 
 	SWRAP_LOG(SWRAP_LOG_TRACE,
 		  "msg_out->msg_controllen=%zu",
 		  (size_t)msg_out->msg_controllen);
 	return ret;
 #else /* HAVE_STRUCT_MSGHDR_MSG_CONTROL */
+	int saved_errno = errno;
 	*msg_out = *msg_tmp;
+	SAFE_FREE(*tmp_control);
+	errno = saved_errno;
 	return ret;
 #endif /* ! HAVE_STRUCT_MSGHDR_MSG_CONTROL */
 }
@@ -6986,12 +6999,13 @@ static ssize_t swrap_recvmsg(int s, struct msghdr *omsg, int flags)
 
 	si = find_socket_info(s);
 	if (si == NULL) {
-		rc = swrap_recvmsg_before_unix(omsg, &msg);
+		uint8_t *tmp_control = NULL;
+		rc = swrap_recvmsg_before_unix(omsg, &msg, &tmp_control);
 		if (rc < 0) {
 			return rc;
 		}
 		ret = libc_recvmsg(s, &msg, flags);
-		return swrap_recvmsg_after_unix(&msg, omsg, ret);
+		return swrap_recvmsg_after_unix(&msg, &tmp_control, omsg, ret);
 	}
 
 	tmp.iov_base = NULL;
