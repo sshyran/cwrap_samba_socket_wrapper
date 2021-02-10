@@ -5993,7 +5993,6 @@ static int swrap_recvmsg_before_unix(struct msghdr *msg_in,
 	if (cm_data == NULL) {
 		return -1;
 	}
-	memcpy(cm_data, msg_in->msg_control, msg_in->msg_controllen);
 
 	msg_tmp->msg_controllen = cm_data_space;
 	msg_tmp->msg_control = cm_data;
