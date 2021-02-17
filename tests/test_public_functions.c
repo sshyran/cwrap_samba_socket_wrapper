@@ -60,6 +60,31 @@ static void test_call_enabled_false(void **state)
 	assert_false(s != NULL);
 }
 
+static void test_call_indicate_no_inet_fd(void **state)
+{
+	int rc;
+	int s = -1;
+
+	(void) state; /* unused */
+
+	socket_wrapper_indicate_no_inet_fd(987654321);
+	socket_wrapper_indicate_no_inet_fd(-1);
+
+	rc = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (rc >= 0) {
+		s = rc;
+		rc = 0;
+	}
+	assert_return_code(rc, errno);
+
+	socket_wrapper_indicate_no_inet_fd(987654321);
+	socket_wrapper_indicate_no_inet_fd(-1);
+	socket_wrapper_indicate_no_inet_fd(s);
+	socket_wrapper_indicate_no_inet_fd(0);
+	socket_wrapper_indicate_no_inet_fd(1);
+	socket_wrapper_indicate_no_inet_fd(2);
+}
+
 int main(void) {
 	int rc;
 
@@ -68,6 +93,12 @@ int main(void) {
 						setup_enabled,
 						teardown_enabled),
 		cmocka_unit_test_setup_teardown(test_call_enabled_false,
+						setup_disabled,
+						teardown_disabled),
+		cmocka_unit_test_setup_teardown(test_call_indicate_no_inet_fd,
+						setup_enabled,
+						teardown_enabled),
+		cmocka_unit_test_setup_teardown(test_call_indicate_no_inet_fd,
 						setup_disabled,
 						teardown_disabled),
 	};

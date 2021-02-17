@@ -7456,6 +7456,28 @@ static void swrap_remove_stale(int fd)
 	swrap_remove_wrapper(__func__, swrap_noop_close, fd);
 }
 
+/*
+ * This allows socket_wrapper aware applications to
+ * indicate that the given fd does not belong to
+ * an inet socket.
+ *
+ * We already overload a lot of unrelated functions
+ * like eventfd(), timerfd_create(), ... in order to
+ * call swrap_remove_stale() on the returned fd, but
+ * we'll never be able to handle all possible syscalls.
+ *
+ * socket_wrapper_indicate_no_inet_fd() gives them a way
+ * to do the same.
+ *
+ * We don't export swrap_remove_stale() in order to
+ * make it easier to analyze SOCKET_WRAPPER_DEBUGLEVEL=3
+ * log files.
+ */
+void socket_wrapper_indicate_no_inet_fd(int fd)
+{
+	swrap_remove_wrapper(__func__, swrap_noop_close, fd);
+}
+
 static int swrap_close(int fd)
 {
 	return swrap_remove_wrapper(__func__, libc_close, fd);

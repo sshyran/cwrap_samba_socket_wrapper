@@ -61,4 +61,29 @@
  */
 bool socket_wrapper_enabled(void);
 
+/*
+ * This allows socket_wrapper aware applications to
+ * indicate that the given fd does not belong to
+ * an inet socket.
+ *
+ * socket_wrapper may not be able to intercept the __close_nocancel()
+ * syscall made from within libc.so. As result it's possible
+ * that the in memory meta date of socket_wrapper references
+ * stale file descriptors, which are already reused for unrelated
+ * kernel objects, e.g. files, directories, ...
+ *
+ * Socket wrapper already intercepts a lot of unrelated
+ * functions like eventfd(), timerfd_create(), ... in order
+ * to remove stale meta data for the returned fd, but
+ * it will never be able to handle all possible syscalls.
+ *
+ * socket_wrapper_indicate_no_inet_fd() gives applications a way
+ * to do the same, explicitly without waiting for new syscalls to
+ * be added to libsocket_wrapper.so.
+ *
+ * This is a no-op if socket_wrapper is not in use or
+ * if the there is no in memory meta data for the given fd.
+ */
+void socket_wrapper_indicate_no_inet_fd(int fd);
+
 #endif /* __SOCKET_WRAPPER_H__ */

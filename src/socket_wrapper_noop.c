@@ -55,3 +55,9 @@ bool socket_wrapper_enabled(void)
 {
 	return false;
 }
+
+void socket_wrapper_indicate_no_inet_fd(int fd)
+{
+	(void) fd; /* unused */
+	return;
+}
