@@ -370,7 +370,7 @@ static pthread_mutex_t autobind_start_mutex = PTHREAD_MUTEX_INITIALIZER;
 /* Mutex to guard the initialization of array of socket_info structures */
 static pthread_mutex_t sockets_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-/* Mutex to guard the socket reset in swrap_close() and swrap_remove_stale() */
+/* Mutex to guard the socket reset in swrap_remove_wrapper() */
 static pthread_mutex_t socket_reset_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Mutex to synchronize access to first free index in socket_info array */
@@ -2404,46 +2404,7 @@ static bool check_addr_port_in_use(const struct sockaddr *sa, socklen_t len)
 }
 #endif
 
-static void swrap_remove_stale(int fd)
-{
-	struct socket_info *si;
-	int si_index;
-
-	SWRAP_LOG(SWRAP_LOG_TRACE, "remove stale wrapper for %d", fd);
-
-	swrap_mutex_lock(&socket_reset_mutex);
-
-	si_index = find_socket_info_index(fd);
-	if (si_index == -1) {
-		swrap_mutex_unlock(&socket_reset_mutex);
-		return;
-	}
-
-	reset_socket_info_index(fd);
-
-	si = swrap_get_socket_info(si_index);
-
-	swrap_mutex_lock(&first_free_mutex);
-	SWRAP_LOCK_SI(si);
-
-	swrap_dec_refcount(si);
-
-	if (swrap_get_refcount(si) > 0) {
-		goto out;
-	}
-
-	if (si->un_addr.sun_path[0] != '\0') {
-		unlink(si->un_addr.sun_path);
-	}
-
-	swrap_set_next_free(si, first_free);
-	first_free = si_index;
-
-out:
-	SWRAP_UNLOCK_SI(si);
-	swrap_mutex_unlock(&first_free_mutex);
-	swrap_mutex_unlock(&socket_reset_mutex);
-}
+static void swrap_remove_stale(int fd);
 
 static int sockaddr_convert_to_un(struct socket_info *si,
 				  const struct sockaddr *in_addr,
@@ -7417,7 +7378,9 @@ ssize_t writev(int s, const struct iovec *vector, int count)
  * CLOSE
  ***************************/
 
-static int swrap_close(int fd)
+static int swrap_remove_wrapper(const char *__func_name,
+				int (*__close_fd_fn)(int fd),
+				int fd)
 {
 	struct socket_info *si = NULL;
 	int si_index;
@@ -7429,10 +7392,10 @@ static int swrap_close(int fd)
 	si_index = find_socket_info_index(fd);
 	if (si_index == -1) {
 		swrap_mutex_unlock(&socket_reset_mutex);
-		return libc_close(fd);
+		return __close_fd_fn(fd);
 	}
 
-	SWRAP_LOG(SWRAP_LOG_TRACE, "Close wrapper for fd=%d", fd);
+	swrap_log(SWRAP_LOG_TRACE, __func_name, "Remove wrapper for fd=%d", fd);
 	reset_socket_info_index(fd);
 
 	si = swrap_get_socket_info(si_index);
@@ -7440,7 +7403,7 @@ static int swrap_close(int fd)
 	swrap_mutex_lock(&first_free_mutex);
 	SWRAP_LOCK_SI(si);
 
-	ret = libc_close(fd);
+	ret = __close_fd_fn(fd);
 	if (ret == -1) {
 		ret_errno = errno;
 	}
@@ -7480,6 +7443,22 @@ out:
 
 	errno = ret_errno;
 	return ret;
+}
+
+static int swrap_noop_close(int fd)
+{
+	(void)fd; /* unused */
+	return 0;
+}
+
+static void swrap_remove_stale(int fd)
+{
+	swrap_remove_wrapper(__func__, swrap_noop_close, fd);
+}
+
+static int swrap_close(int fd)
+{
+	return swrap_remove_wrapper(__func__, libc_close, fd);
 }
 
 int close(int fd)
