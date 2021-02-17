@@ -2027,6 +2027,13 @@ static int convert_in_un_remote(struct socket_info *si, const struct sockaddr *i
 			type = u_type;
 			iface = (addr & 0x000000FF);
 		} else {
+			char str[256] = {0,};
+			inet_ntop(inaddr->sa_family,
+				  &in->sin_addr,
+				  str, sizeof(str));
+			SWRAP_LOG(SWRAP_LOG_WARN,
+				  "str[%s] prt[%u]",
+				  str, (unsigned)prt);
 			errno = ENETUNREACH;
 			return -1;
 		}
@@ -2062,6 +2069,13 @@ static int convert_in_un_remote(struct socket_info *si, const struct sockaddr *i
 		if (IN6_ARE_ADDR_EQUAL(&cmp1, &cmp2)) {
 			iface = in->sin6_addr.s6_addr[15];
 		} else {
+			char str[256] = {0,};
+			inet_ntop(inaddr->sa_family,
+				  &in->sin6_addr,
+				  str, sizeof(str));
+			SWRAP_LOG(SWRAP_LOG_WARN,
+				  "str[%s] prt[%u]",
+				  str, (unsigned)prt);
 			errno = ENETUNREACH;
 			return -1;
 		}
