@@ -3004,7 +3004,7 @@ static int swrap_pcap_get_fd(const char *fname)
 		file_hdr.frame_max_len	= SWRAP_FRAME_LENGTH_MAX;
 		file_hdr.link_type	= 0x0065; /* 101 RAW IP */
 
-		if (write(fd, &file_hdr, sizeof(file_hdr)) != sizeof(file_hdr)) {
+		if (libc_write(fd, &file_hdr, sizeof(file_hdr)) != sizeof(file_hdr)) {
 			libc_close(fd);
 			fd = -1;
 		}
@@ -3339,7 +3339,7 @@ static void swrap_pcap_dump_packet(struct socket_info *si,
 
 	fd = swrap_pcap_get_fd(file_name);
 	if (fd != -1) {
-		if (write(fd, packet, packet_len) != (ssize_t)packet_len) {
+		if (libc_write(fd, packet, packet_len) != (ssize_t)packet_len) {
 			free(packet);
 			goto done;
 		}
@@ -5546,7 +5546,7 @@ static int swrap_sendmsg_unix_scm_rights(const struct cmsghdr *cmsg,
 		return -1;
 	}
 
-	sret = write(pipefd[1], &info, sizeof(info));
+	sret = libc_write(pipefd[1], &info, sizeof(info));
 	if (sret != sizeof(info)) {
 		int saved_errno = errno;
 		if (sret != -1) {
