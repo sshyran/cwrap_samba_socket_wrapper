@@ -7421,6 +7421,7 @@ static int swrap_close(int fd)
 {
 	struct socket_info *si = NULL;
 	int si_index;
+	int ret_errno = errno;
 	int ret;
 
 	swrap_mutex_lock(&socket_reset_mutex);
@@ -7440,6 +7441,9 @@ static int swrap_close(int fd)
 	SWRAP_LOCK_SI(si);
 
 	ret = libc_close(fd);
+	if (ret == -1) {
+		ret_errno = errno;
+	}
 
 	swrap_dec_refcount(si);
 
@@ -7474,6 +7478,7 @@ out:
 	swrap_mutex_unlock(&first_free_mutex);
 	swrap_mutex_unlock(&socket_reset_mutex);
 
+	errno = ret_errno;
 	return ret;
 }
 
