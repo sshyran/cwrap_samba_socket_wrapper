@@ -492,6 +492,9 @@ typedef int (*__libc_bind)(int sockfd,
 			   const struct sockaddr *addr,
 			   socklen_t addrlen);
 typedef int (*__libc_close)(int fd);
+#ifdef HAVE___CLOSE_NOCANCEL
+typedef int (*__libc___close_nocancel)(int fd);
+#endif
 typedef int (*__libc_connect)(int sockfd,
 			      const struct sockaddr *addr,
 			      socklen_t addrlen);
@@ -572,6 +575,9 @@ struct swrap_libc_symbols {
 #endif
 	SWRAP_SYMBOL_ENTRY(bind);
 	SWRAP_SYMBOL_ENTRY(close);
+#ifdef HAVE___CLOSE_NOCANCEL
+	SWRAP_SYMBOL_ENTRY(__close_nocancel);
+#endif
 	SWRAP_SYMBOL_ENTRY(connect);
 	SWRAP_SYMBOL_ENTRY(dup);
 	SWRAP_SYMBOL_ENTRY(dup2);
@@ -850,6 +856,15 @@ static int libc_close(int fd)
 
 	return swrap.libc.symbols._libc_close.f(fd);
 }
+
+#ifdef HAVE___CLOSE_NOCANCEL
+static int libc___close_nocancel(int fd)
+{
+	swrap_bind_symbol_all();
+
+	return swrap.libc.symbols._libc___close_nocancel.f(fd);
+}
+#endif /* HAVE___CLOSE_NOCANCEL */
 
 static int libc_connect(int sockfd,
 			const struct sockaddr *addr,
@@ -1199,6 +1214,9 @@ static void __swrap_bind_symbol_all_once(void)
 #endif
 	swrap_bind_symbol_libsocket(bind);
 	swrap_bind_symbol_libc(close);
+#ifdef HAVE___CLOSE_NOCANCEL
+	swrap_bind_symbol_libc(__close_nocancel);
+#endif
 	swrap_bind_symbol_libsocket(connect);
 	swrap_bind_symbol_libc(dup);
 	swrap_bind_symbol_libc(dup2);
@@ -7487,6 +7505,21 @@ int close(int fd)
 {
 	return swrap_close(fd);
 }
+
+#ifdef HAVE___CLOSE_NOCANCEL
+
+static int swrap___close_nocancel(int fd)
+{
+	return swrap_remove_wrapper(__func__, libc___close_nocancel, fd);
+}
+
+int __close_nocancel(int fd);
+int __close_nocancel(int fd)
+{
+	return swrap___close_nocancel(fd);
+}
+
+#endif /* HAVE___CLOSE_NOCANCEL */
 
 /****************************
  * DUP

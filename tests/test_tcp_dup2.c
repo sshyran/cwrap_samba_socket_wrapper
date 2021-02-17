@@ -2,6 +2,11 @@
 
 #include <cmocka.h>
 #include <unistd.h>
+#include <errno.h>
+
+#ifdef HAVE___CLOSE_NOCANCEL
+extern int __close_nocancel(int fd);
+#endif
 
 static int setup(void **state)
 {
@@ -20,6 +25,7 @@ static int teardown(void **state)
 static void test_dup2_existing_open_fd(void **state)
 {
 	int s, dup_s;
+	int rc;
 
 	(void) state; /* unused */
 
@@ -34,7 +40,19 @@ static void test_dup2_existing_open_fd(void **state)
 	dup_s = dup2(s, s);
 	assert_int_equal(dup_s, s);
 
-	close(s);
+#ifdef HAVE___CLOSE_NOCANCEL
+	rc = __close_nocancel(s);
+	assert_return_code(rc, errno);
+	rc = close(s);
+	assert_int_equal(rc, -1);
+	assert_int_equal(errno, EBADF);
+	rc = __close_nocancel(s);
+	assert_int_equal(rc, -1);
+	assert_int_equal(errno, EBADF);
+#else
+	rc = close(s);
+	assert_return_code(rc, errno);
+#endif
 }
 
 int main(void) {
