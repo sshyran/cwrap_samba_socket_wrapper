@@ -2,8 +2,8 @@
  * BSD 3-Clause License
  *
  * Copyright (c) 2005-2008, Jelmer Vernooij <jelmer@samba.org>
- * Copyright (c) 2006-2018, Stefan Metzmacher <metze@samba.org>
- * Copyright (c) 2013-2018, Andreas Schneider <asn@samba.org>
+ * Copyright (c) 2006-2021, Stefan Metzmacher <metze@samba.org>
+ * Copyright (c) 2013-2021, Andreas Schneider <asn@samba.org>
  * Copyright (c) 2014-2017, Michael Adam <obnox@samba.org>
  * Copyright (c) 2016-2018, Anoop C S <anoopcs@redhat.com>
  * All rights reserved.
@@ -85,6 +85,8 @@
 #include <rpc/rpc.h>
 #endif
 #include <pthread.h>
+
+#include "socket_wrapper.h"
 
 enum swrap_dbglvl_e {
 	SWRAP_LOG_ERROR = 0,
@@ -391,8 +393,6 @@ static pthread_mutex_t pcap_dump_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t mtu_update_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Function prototypes */
-
-bool socket_wrapper_enabled(void);
 
 #if ! defined(HAVE_CONSTRUCTOR_ATTRIBUTE) && defined(HAVE_PRAGMA_INIT)
 /* xlC and other oldschool compilers support (only) this */

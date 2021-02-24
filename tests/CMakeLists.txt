@@ -56,6 +56,7 @@ set(SWRAP_TESTS
     test_echo_udp_sendmsg_recvmsg
     test_swrap_unit
     test_max_sockets
+    test_public_functions
     test_close_failure
     test_tcp_socket_overwrite
     ${SWRAP_THREADED_TESTS})
@@ -111,7 +112,7 @@ foreach(_SWRAP_TEST ${SWRAP_TESTS})
     add_cmocka_test(${_SWRAP_TEST}
                     SOURCES ${_SWRAP_TEST}.c
                     COMPILE_OPTIONS ${DEFAULT_C_COMPILE_FLAGS} -D_GNU_SOURCE
-                    LINK_LIBRARIES ${TORTURE_LIBRARY}
+                    LINK_LIBRARIES ${TORTURE_LIBRARY} socket_wrapper_noop
                     LINK_OPTIONS ${DEFAULT_LINK_FLAGS})
     add_cmocka_test_environment(${_SWRAP_TEST})
 endforeach()

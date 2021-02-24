@@ -71,6 +71,16 @@ install(
     pkgconfig
 )
 
+configure_file(socket_wrapper_noop.pc.cmake ${CMAKE_CURRENT_BINARY_DIR}/socket_wrapper_noop.pc @ONLY)
+install(
+  FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/socket_wrapper_noop.pc
+  DESTINATION
+      ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+  COMPONENT
+    pkgconfig
+)
+
 # cmake config files
 configure_file(socket_wrapper-config-version.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/socket_wrapper-config-version.cmake @ONLY)
 configure_file(socket_wrapper-config.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/socket_wrapper-config.cmake @ONLY)

@@ -133,6 +133,29 @@ EXAMPLE
   # Now you can type 'Hello!' which will be sent to the server and should appear
   # in the console output of the server.
 
+PUBLIC FUNCTIONS
+----------------
+
+Socket wrapper advanced helpers.
+
+Applications with the need to alter their behaviour when
+socket wrapper is active, can link use these functions.
+
+By default it's required for applications to use any of these
+functions as libsocket_wrapper.so is injected at runtime via
+LD_PRELOAD.
+
+Applications using these functions should link against
+libsocket_wrapper_noop.so by using -lsocket_wrapper_noop,
+or implement their own noop stubs.
+
+#include <socket_wrapper.h>
+
+bool socket_wrapper_enabled(void);
+
+- This returns true when socket wrapper is actively in use.
+
+
 RESOURCES
 ---------
 

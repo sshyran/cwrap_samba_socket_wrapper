@@ -1,13 +1,13 @@
 '\" t
 .\"     Title: socket_wrapper
 .\"    Author: Samba Team
-.\" Generator: Asciidoctor 2.0.12
-.\"      Date: 2021-02-02
+.\" Generator: Asciidoctor 2.0.10
+.\"      Date: 2021-02-24
 .\"    Manual: \ \&
 .\"    Source: \ \&
 .\"  Language: English
 .\"
-.TH "SOCKET_WRAPPER" "1" "2021-02-02" "\ \&" "\ \&"
+.TH "SOCKET_WRAPPER" "1" "2021-02-24" "\ \&" "\ \&"
 .ie \n(.g .ds Aq \(aq
 .el       .ds Aq '
 .ss \n[.ss] 0
@@ -214,54 +214,73 @@ to be usable.
 .sp
 .if n .RS 4
 .nf
-.fam C
 # Open a console and create a directory for the unix sockets.
 $ mktemp \-d
 /tmp/tmp.bQRELqDrhM
-.fam
 .fi
 .if n .RE
 .sp
 .if n .RS 4
 .nf
-.fam C
 # Then start nc to listen for network traffic using the temporary directory.
 $ LD_PRELOAD=libsocket_wrapper.so \(rs
   SOCKET_WRAPPER_DIR=/tmp/tmp.bQRELqDrhM \(rs
   SOCKET_WRAPPER_DEFAULT_IFACE=10 nc \-v \-l 127.0.0.10 7
-.fam
 .fi
 .if n .RE
 .sp
 .if n .RS 4
 .nf
-.fam C
 # (If nc, listens on 0.0.0.0 then listener will be open on 127.0.0.10 because
 #  it is the default interface)
-.fam
 .fi
 .if n .RE
 .sp
 .if n .RS 4
 .nf
-.fam C
 # Now open another console and start \(aqnc\(aq as a client to connect to the server:
 $ LD_PRELOAD=libsocket_wrapper.so \(rs
   SOCKET_WRAPPER_DIR=/tmp/tmp.bQRELqDrhM \(rs
   SOCKET_WRAPPER_DEFAULT_IFACE=100 nc \-v 127.0.0.10 7
-.fam
 .fi
 .if n .RE
 .sp
 .if n .RS 4
 .nf
-.fam C
 # (The client will use the address 127.0.0.100 when connecting to the server)
 # Now you can type \(aqHello!\(aq which will be sent to the server and should appear
 # in the console output of the server.
-.fam
 .fi
 .if n .RE
+.SH "PUBLIC FUNCTIONS"
+.sp
+Socket wrapper advanced helpers.
+.sp
+Applications with the need to alter their behaviour when
+socket wrapper is active, can link use these functions.
+.sp
+By default it\(cqs required for applications to use any of these
+functions as libsocket_wrapper.so is injected at runtime via
+LD_PRELOAD.
+.sp
+Applications using these functions should link against
+libsocket_wrapper_noop.so by using \-lsocket_wrapper_noop,
+or implement their own noop stubs.
+.sp
+#include <socket_wrapper.h>
+.sp
+bool socket_wrapper_enabled(void);
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.  sp -1
+.  IP \(bu 2.3
+.\}
+This returns true when socket wrapper is actively in use.
+.RE
 .SH "RESOURCES"
 .sp
 \fBProject web site:\fP \c
