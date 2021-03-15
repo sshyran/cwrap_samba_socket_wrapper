@@ -32,7 +32,10 @@ set(SOCKET_WRAPPER_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_SHARED_LIBRARY_
 add_library(socket_wrapper_noop SHARED socket_wrapper_noop.c)
 target_include_directories(socket_wrapper_noop
                            PRIVATE
-                               ${CMAKE_BINARY_DIR})
+                               ${socket_wrapper_BINARY_DIR}
+                           PUBLIC
+                               $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+                               $<INSTALL_INTERFACE:include>)
 target_compile_options(socket_wrapper_noop
                        PRIVATE
                           ${DEFAULT_C_COMPILE_FLAGS}
