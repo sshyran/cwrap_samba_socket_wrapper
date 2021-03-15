@@ -8,7 +8,8 @@ target_compile_options(socket_wrapper
                        PRIVATE
                           ${DEFAULT_C_COMPILE_FLAGS}
                           -D_GNU_SOURCE)
-target_link_libraries(socket_wrapper ${SWRAP_REQUIRED_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(socket_wrapper
+                      PRIVATE ${SWRAP_REQUIRED_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
 set_target_properties(socket_wrapper
                       PROPERTIES
@@ -36,7 +37,8 @@ target_compile_options(socket_wrapper_noop
                        PRIVATE
                           ${DEFAULT_C_COMPILE_FLAGS}
                           -D_GNU_SOURCE)
-target_link_libraries(socket_wrapper_noop ${SWRAP_REQUIRED_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(socket_wrapper_noop
+                      PRIVATE ${SWRAP_REQUIRED_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 set_target_properties(socket_wrapper_noop
                       PROPERTIES
                           VERSION ${LIBRARY_VERSION}
