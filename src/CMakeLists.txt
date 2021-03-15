@@ -44,8 +44,8 @@ target_link_libraries(socket_wrapper_noop
                       PRIVATE ${SWRAP_REQUIRED_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 set_target_properties(socket_wrapper_noop
                       PROPERTIES
-                          VERSION ${LIBRARY_VERSION}
-                          SOVERSION ${LIBRARY_SOVERSION})
+                          VERSION ${NOOP_LIBRARY_VERSION}
+                          SOVERSION ${NOOP_LIBRARY_SOVERSION})
 if (DEFINED DEFAULT_LINK_FLAGS)
     set_target_properties(socket_wrapper_noop
                           PROPERTIES
