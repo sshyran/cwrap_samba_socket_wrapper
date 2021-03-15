@@ -53,10 +53,14 @@ if (DEFINED DEFAULT_LINK_FLAGS)
 endif()
 
 install(TARGETS socket_wrapper_noop
+        EXPORT socket_wrapper_noop-config
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
+
+install(EXPORT socket_wrapper_noop-config
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/socket_wrapper)
 
 install(
     FILES
