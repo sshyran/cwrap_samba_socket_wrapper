@@ -6285,9 +6285,11 @@ static void swrap_sendmsg_after(int fd,
 
 	for (i = 0; i < (size_t)msg->msg_iovlen; i++) {
 		size_t this_time = MIN(remain, (size_t)msg->msg_iov[i].iov_len);
-		memcpy(buf + ofs,
-		       msg->msg_iov[i].iov_base,
-		       this_time);
+		if (this_time > 0) {
+			memcpy(buf + ofs,
+			       msg->msg_iov[i].iov_base,
+			       this_time);
+		}
 		ofs += this_time;
 		remain -= this_time;
 	}
